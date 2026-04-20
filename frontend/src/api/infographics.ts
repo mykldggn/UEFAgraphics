@@ -9,24 +9,21 @@ export const infographicsApi = {
     imgUrl(`/infographics/player/${playerId}/career-xg`,
            seasons ? { seasons: seasons.join(',') } : {}),
 
-  // Player (FBref)
-  radar: (player: string, leagueId: string, season: number, position: string, compareTo?: string) => {
-    const params: Record<string, string | number> = { player, league_id: leagueId, season, position }
-    if (compareTo) params.compare_player = compareTo
-    return imgUrl('/infographics/player/fbref/radar', params)
+  // Player (API-Football)
+  radar: (playerId: string, leagueId: string, season: number, position: string, compareId?: string) => {
+    const params: Record<string, string | number> = { league_id: leagueId, season, position }
+    if (compareId) params.compare_id = compareId
+    return imgUrl(`/infographics/player/${playerId}/radar`, params)
   },
 
-  summaryCard: (player: string, leagueId: string, season: number, position: string) =>
-    imgUrl('/infographics/player/fbref/summary-card', { player, league_id: leagueId, season, position }),
-
-  passmap: (player: string, leagueId: string, season: number) =>
-    imgUrl('/infographics/player/fbref/passmap', { player, league_id: leagueId, season }),
+  summaryCard: (playerId: string, season: number, position: string) =>
+    imgUrl(`/infographics/player/${playerId}/summary-card`, { season, position }),
 
   // Team (Understat)
   teamXgTimeline: (teamId: string, teamName: string, season: number) =>
     imgUrl(`/infographics/team/${teamId}/xg-timeline`, { team_name: teamName, season }),
 
-  // Team (FBref)
-  teamSeasonCard: (team: string, leagueId: string, season: number) =>
-    imgUrl('/infographics/team/fbref/season-card', { team, league_id: leagueId, season }),
+  // Team (API-Football)
+  teamSeasonCard: (teamId: string, teamName: string, leagueId: string, season: number) =>
+    imgUrl(`/infographics/team/${teamId}/season-card`, { team_name: teamName, league_id: leagueId, season }),
 }

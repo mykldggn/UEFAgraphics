@@ -12,35 +12,51 @@ from mplsoccer import PyPizza
 from app.viz.common import BG, BG_CARD, TEXT, TEXT_SUB, ACCENT, fig_to_png, get_font, team_color
 
 # Stat groups for attackers / midfielders / defenders
+# Keys match the flat stat dict produced by api_football_service._flatten_player_stats
 ATTACKER_PARAMS = [
-    "Goals", "xG", "Shots/90", "xG/Shot",
-    "Assists", "xA", "Prog Passes/90", "Key Passes/90",
-    "Dribbles/90", "Touches in Box/90",
-    "Fouls Won/90", "Aerial Win%",
+    "Goals/90", "Assists/90", "Shots/90", "Shots on Target/90",
+    "Shot Accuracy%", "Dribbles/90", "Dribble Success%",
+    "Pass Accuracy%", "Fouls Won/90", "Duel Win%",
 ]
 MIDFIELDER_PARAMS = [
-    "Goals", "xG", "Assists", "xA",
-    "Pass Cmp%", "Prog Passes/90", "Key Passes/90", "Through Balls/90",
-    "Tackles/90", "Interceptions/90",
-    "Dribbles/90", "Pressures/90",
+    "Goals/90", "Assists/90", "Passes/90", "Pass Accuracy%",
+    "Tackles/90", "Interceptions/90", "Blocks/90",
+    "Dribbles/90", "Fouls Won/90", "Duel Win%",
 ]
 DEFENDER_PARAMS = [
-    "Tackles/90", "Interceptions/90", "Clearances/90", "Aerial Win%",
-    "Blocks/90", "Pressures/90", "Ball Recoveries/90",
-    "Pass Cmp%", "Prog Passes/90",
-    "Dribbles/90", "Fouls/90", "Errors/90",
+    "Tackles/90", "Interceptions/90", "Blocks/90", "Duel Win%",
+    "Fouls/90", "Pass Accuracy%", "Passes/90",
+    "Dribbles/90", "Dribble Success%", "Goals/90",
 ]
 GK_PARAMS = [
-    "Save%", "PSxG-GA", "Clean Sheet%", "Crosses Stopped%",
-    "Pass Cmp%", "Long Pass Cmp%",
-    "Goals Against/90", "xGA/90",
+    "Pass Accuracy%", "Passes/90", "Duel Win%",
+    "Goals/90", "Assists/90",
 ]
 
 POSITION_PARAMS = {
-    "FW": ATTACKER_PARAMS, "ST": ATTACKER_PARAMS,
-    "MF": MIDFIELDER_PARAMS, "CM": MIDFIELDER_PARAMS, "AM": MIDFIELDER_PARAMS,
-    "DF": DEFENDER_PARAMS, "CB": DEFENDER_PARAMS, "FB": DEFENDER_PARAMS,
-    "GK": GK_PARAMS,
+    "FW": ATTACKER_PARAMS, "ST": ATTACKER_PARAMS, "Attacker": ATTACKER_PARAMS,
+    "MF": MIDFIELDER_PARAMS, "CM": MIDFIELDER_PARAMS, "AM": MIDFIELDER_PARAMS, "Midfielder": MIDFIELDER_PARAMS,
+    "DF": DEFENDER_PARAMS, "CB": DEFENDER_PARAMS, "FB": DEFENDER_PARAMS, "Defender": DEFENDER_PARAMS,
+    "GK": GK_PARAMS, "Goalkeeper": GK_PARAMS,
+}
+
+# Map display param name → flat stat key
+PARAM_TO_STAT: dict[str, str] = {
+    "Goals/90":           "goals_p90",
+    "Assists/90":         "assists_p90",
+    "Shots/90":           "shots_p90",
+    "Shots on Target/90": "shots_on_p90",
+    "Shot Accuracy%":     "shot_accuracy",
+    "Dribbles/90":        "dribbles_p90",
+    "Dribble Success%":   "dribble_success",
+    "Pass Accuracy%":     "pass_cmp_pct",
+    "Passes/90":          "passes_p90",
+    "Fouls Won/90":       "fouls_won_p90",
+    "Fouls/90":           "fouls_p90",
+    "Tackles/90":         "tackles_p90",
+    "Interceptions/90":   "ints_p90",
+    "Blocks/90":          "blocks_p90",
+    "Duel Win%":          "duel_win_pct",
 }
 
 # Colour bands

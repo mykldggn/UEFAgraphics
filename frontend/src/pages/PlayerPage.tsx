@@ -16,11 +16,10 @@ const POSITION_OPTS = [
 ]
 
 const TABS = [
-  { id: 'shotmap',      label: 'Shot Map' },
-  { id: 'career-xg',   label: 'Career xG' },
-  { id: 'radar',       label: 'Radar' },
-  { id: 'summary',     label: 'Summary Card' },
-  { id: 'passmap',     label: 'Pass Map' },
+  { id: 'shotmap',    label: 'Shot Map' },
+  { id: 'career-xg', label: 'Career xG' },
+  { id: 'radar',     label: 'Radar' },
+  { id: 'summary',   label: 'Summary Card' },
 ]
 
 export default function PlayerPage() {
@@ -45,17 +44,15 @@ export default function PlayerPage() {
       case 'career-xg':
         return infographicsApi.careerXg(playerName)
       case 'radar':
-        return infographicsApi.radar(playerName, leagueId, season, position)
+        return infographicsApi.radar(playerId!, leagueId, season, position)
       case 'summary':
-        return infographicsApi.summaryCard(playerName, leagueId, season, position)
-      case 'passmap':
-        return infographicsApi.passmap(playerName, leagueId, season)
+        return infographicsApi.summaryCard(playerId!, season, position)
       default:
         return ''
     }
   }
 
-  const showSeasonSelector = ['shotmap', 'radar', 'summary', 'passmap'].includes(activeTab)
+  const showSeasonSelector = ['shotmap', 'radar', 'summary'].includes(activeTab)
   const showPositionSelector = ['radar', 'summary'].includes(activeTab)
 
   return (

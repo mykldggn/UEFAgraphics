@@ -29,7 +29,7 @@ export default function TeamPage() {
       case 'xg-timeline':
         return infographicsApi.teamXgTimeline(teamId!, teamName, season)
       case 'season-card':
-        return infographicsApi.teamSeasonCard(teamName, leagueId, season)
+        return infographicsApi.teamSeasonCard(teamId!, teamName, leagueId, season)
       default:
         return ''
     }

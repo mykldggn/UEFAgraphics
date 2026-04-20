@@ -297,14 +297,24 @@ def get_team_shooting_stats(league_id: str, season: int) -> pd.DataFrame:
 
 
 def get_league_table(league_id: str, season: int) -> pd.DataFrame:
+    """Derive standings from team standard stats (sorted by points)."""
     key = {"league": league_id, "season": season}
     cached = cache.json_get("fbref_league_table", key, ttl_hours=24)
     if cached is not None:
         return pd.DataFrame(cached)
     try:
-        fb = _fbref(league_id, season)
-        df = fb.read_league_table()
-        df = df.reset_index()
+        df = get_team_standard_stats(league_id, season)
+        if df.empty:
+            return pd.DataFrame()
+        # Normalise common column names from FBref standard stats
+        rename = {
+            "W": "wins", "D": "draws", "L": "losses",
+            "GF": "goals_for", "GA": "goals_against",
+            "GD": "goal_diff", "Pts": "points", "Pts/G": "pts_per_game",
+        }
+        df = df.rename(columns={k: v for k, v in rename.items() if k in df.columns})
+        if "points" in df.columns:
+            df = df.sort_values("points", ascending=False).reset_index(drop=True)
         cache.json_save("fbref_league_table", key, df.to_dict(orient="records"))
         return df
     except Exception as exc:

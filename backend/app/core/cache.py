@@ -2,6 +2,8 @@
 Disk cache for generated infographic images and scraped data.
 Keys are hex MD5 digests of the (type, params) tuple.
 """
+from __future__ import annotations
+
 import hashlib
 import json
 import os
