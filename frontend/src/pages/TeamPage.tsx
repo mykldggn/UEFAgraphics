@@ -27,7 +27,7 @@ export default function TeamPage() {
   function imgSrc(): string {
     switch (activeTab) {
       case 'xg-timeline':
-        return infographicsApi.teamXgTimeline(teamId!, teamName, season)
+        return infographicsApi.teamXgTimeline(teamId!, teamName, leagueId, season)
       case 'season-card':
         return infographicsApi.teamSeasonCard(teamId!, teamName, leagueId, season)
       default:

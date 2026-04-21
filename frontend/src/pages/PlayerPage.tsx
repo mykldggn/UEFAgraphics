@@ -46,7 +46,7 @@ export default function PlayerPage() {
       case 'radar':
         return infographicsApi.radar(playerId!, leagueId, season, position)
       case 'summary':
-        return infographicsApi.summaryCard(playerId!, season, position)
+        return infographicsApi.summaryCard(playerId!, leagueId, season, position)
       default:
         return ''
     }

@@ -272,10 +272,11 @@ def get_league_teams(league: str, season: int) -> list[dict]:
         return cached
 
     _get_session().get(f"{API_BASE}/league/{league}/{season}", timeout=30)
-    data = _ajax(f"getLeagueTeams/{league}/{season}", f"league/{league}/{season}")
-    if not data:
+    data = _ajax(f"getLeagueData/{league}/{season}", f"league/{league}/{season}")
+    if not data or not isinstance(data, dict):
         return []
 
+    teams_raw = data.get("teams", {}) or {}
     teams = [
         {
             "id":    str(tid),
@@ -288,7 +289,7 @@ def get_league_teams(league: str, season: int) -> list[dict]:
             "draws": int(info.get("draws", 0)),
             "loses": int(info.get("loses", 0)),
         }
-        for tid, info in (data or {}).items()
+        for tid, info in teams_raw.items()
     ]
     cache.json_save("understat_league_teams", ck, teams)
     return teams
@@ -374,8 +375,6 @@ def _build_shot_df(shots: list) -> pd.DataFrame:
     df["X"]      = df["X"] * 100
     df["Y"]      = df["Y"] * 100
     df["season"] = df["season"].astype(int)
-    if "date" in df.columns:
-        df["date"] = pd.to_datetime(df["date"], errors="coerce")
     if "h_a" in df.columns and "h_team" in df.columns and "a_team" in df.columns:
         df["team"] = df.apply(lambda r: r["h_team"] if r["h_a"] == "h" else r["a_team"], axis=1)
     return df.reset_index(drop=True)

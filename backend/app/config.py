@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     CACHE_DIR: str = "./cache"
     SOCCERDATA_DIR: str = "./soccerdata_cache"
     API_FOOTBALL_KEY: str = ""
+    FOOTBALL_DATA_KEY: str = ""
 
     class Config:
         env_file = ".env"
