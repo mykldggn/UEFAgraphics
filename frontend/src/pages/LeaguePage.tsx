@@ -27,9 +27,17 @@ export default function LeaguePage() {
 
   if (!leagueId) return null
 
-  const numCols = table.length > 0
-    ? Object.keys(table[0]).filter(k => k !== 'team').slice(0, 8)
-    : []
+  // Explicit columns: key → header label (rank and team_id excluded)
+  const COLS: { key: string; label: string }[] = [
+    { key: 'played',        label: 'MP' },
+    { key: 'wins',          label: 'W' },
+    { key: 'draws',         label: 'D' },
+    { key: 'losses',        label: 'L' },
+    { key: 'goals_for',     label: 'GF' },
+    { key: 'goals_against', label: 'GA' },
+    { key: 'goal_diff',     label: 'GD' },
+    { key: 'points',        label: 'Pts' },
+  ].filter(c => table.length > 0 && table[0][c.key] != null)
 
   return (
     <div className="space-y-6">
@@ -62,8 +70,8 @@ export default function LeaguePage() {
               <tr className="border-b border-border text-sub text-xs uppercase tracking-wide">
                 <th className="py-2 px-3 text-left w-6">#</th>
                 <th className="py-2 px-3 text-left">Team</th>
-                {numCols.map(col => (
-                  <th key={col} className="py-2 px-3 text-right">{col.replace(/_/g, ' ')}</th>
+                {COLS.map(c => (
+                  <th key={c.key} className="py-2 px-3 text-right">{c.label}</th>
                 ))}
               </tr>
             </thead>
@@ -72,9 +80,9 @@ export default function LeaguePage() {
                 <tr key={i} className="border-b border-border/50 hover:bg-card transition-colors">
                   <td className="py-2 px-3 text-sub">{i + 1}</td>
                   <td className="py-2 px-3 font-medium">{row.team}</td>
-                  {numCols.map(col => (
-                    <td key={col} className="py-2 px-3 text-right text-sub">
-                      {row[col] != null ? String(row[col]) : '—'}
+                  {COLS.map(c => (
+                    <td key={c.key} className={`py-2 px-3 text-right ${c.key === 'points' ? 'font-semibold text-accent' : 'text-sub'}`}>
+                      {row[c.key] != null ? String(row[c.key]) : '—'}
                     </td>
                   ))}
                 </tr>
