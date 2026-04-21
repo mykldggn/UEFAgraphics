@@ -11,52 +11,67 @@ from mplsoccer import PyPizza
 
 from app.viz.common import BG, BG_CARD, TEXT, TEXT_SUB, ACCENT, fig_to_png, get_font, team_color
 
-# Stat groups for attackers / midfielders / defenders
-# Keys match the flat stat dict produced by api_football_service._flatten_player_stats
+# Stat groups — keys map to PARAM_TO_STAT below (which maps to canonical
+# column names produced by fbref_service.get_combined_player_stats)
 ATTACKER_PARAMS = [
-    "Goals/90", "Assists/90", "Shots/90", "Shots on Target/90",
-    "Shot Accuracy%", "Dribbles/90", "Dribble Success%",
-    "Pass Accuracy%", "Fouls Won/90", "Duel Win%",
+    "Goals/90", "xG/90", "npxG/90", "Shots/90",
+    "Shot Accuracy%", "Assists/90", "xA/90",
+    "Key Passes/90", "Dribbles/90", "Dribble Success%",
+    "Fouls Won/90", "Aerial Win%",
 ]
 MIDFIELDER_PARAMS = [
-    "Goals/90", "Assists/90", "Passes/90", "Pass Accuracy%",
-    "Tackles/90", "Interceptions/90", "Blocks/90",
-    "Dribbles/90", "Fouls Won/90", "Duel Win%",
+    "Goals/90", "Assists/90", "xG/90", "xA/90",
+    "Pass Accuracy%", "Prog Passes/90", "Key Passes/90",
+    "Tackles/90", "Interceptions/90", "Pressures/90",
+    "Dribbles/90", "Aerial Win%",
 ]
 DEFENDER_PARAMS = [
-    "Tackles/90", "Interceptions/90", "Blocks/90", "Duel Win%",
-    "Fouls/90", "Pass Accuracy%", "Passes/90",
-    "Dribbles/90", "Dribble Success%", "Goals/90",
+    "Tackles/90", "Interceptions/90", "Blocks/90", "Clearances/90",
+    "Aerial Win%", "Pressures/90",
+    "Pass Accuracy%", "Prog Passes/90",
+    "Dribbles/90", "Fouls/90",
 ]
 GK_PARAMS = [
-    "Pass Accuracy%", "Passes/90", "Duel Win%",
-    "Goals/90", "Assists/90",
+    "Save%", "Clean Sheet%", "Goals Against/90", "PSxG-GA",
+    "Pass Accuracy%", "Prog Passes/90",
 ]
 
 POSITION_PARAMS = {
     "FW": ATTACKER_PARAMS, "ST": ATTACKER_PARAMS, "Attacker": ATTACKER_PARAMS,
-    "MF": MIDFIELDER_PARAMS, "CM": MIDFIELDER_PARAMS, "AM": MIDFIELDER_PARAMS, "Midfielder": MIDFIELDER_PARAMS,
-    "DF": DEFENDER_PARAMS, "CB": DEFENDER_PARAMS, "FB": DEFENDER_PARAMS, "Defender": DEFENDER_PARAMS,
-    "GK": GK_PARAMS, "Goalkeeper": GK_PARAMS,
+    "MF": MIDFIELDER_PARAMS, "CM": MIDFIELDER_PARAMS, "AM": MIDFIELDER_PARAMS,
+    "DM": MIDFIELDER_PARAMS, "Midfielder": MIDFIELDER_PARAMS,
+    "DF": DEFENDER_PARAMS,  "CB": DEFENDER_PARAMS, "FB": DEFENDER_PARAMS,
+    "WB": DEFENDER_PARAMS,  "Defender": DEFENDER_PARAMS,
+    "GK": GK_PARAMS,        "Goalkeeper": GK_PARAMS,
 }
 
-# Map display param name → flat stat key
+# Display param name → canonical column from fbref_service combined DataFrame
 PARAM_TO_STAT: dict[str, str] = {
-    "Goals/90":           "goals_p90",
-    "Assists/90":         "assists_p90",
-    "Shots/90":           "shots_p90",
-    "Shots on Target/90": "shots_on_p90",
-    "Shot Accuracy%":     "shot_accuracy",
-    "Dribbles/90":        "dribbles_p90",
-    "Dribble Success%":   "dribble_success",
-    "Pass Accuracy%":     "pass_cmp_pct",
-    "Passes/90":          "passes_p90",
-    "Fouls Won/90":       "fouls_won_p90",
-    "Fouls/90":           "fouls_p90",
-    "Tackles/90":         "tackles_p90",
-    "Interceptions/90":   "ints_p90",
-    "Blocks/90":          "blocks_p90",
-    "Duel Win%":          "duel_win_pct",
+    "Goals/90":         "goals_p90",
+    "Assists/90":       "assists_p90",
+    "xG/90":            "xg_p90",
+    "npxG/90":          "npxg_p90",
+    "xA/90":            "xag_p90",
+    "Shots/90":         "shots_p90",
+    "Shot Accuracy%":   "shot_accuracy",
+    "Pass Accuracy%":   "pass_cmp_pct",
+    "Prog Passes/90":   "prog_passes_p90",
+    "Key Passes/90":    "key_passes_p90",
+    "Tackles/90":       "tackles_p90",
+    "Interceptions/90": "ints_p90",
+    "Blocks/90":        "blocks_p90",
+    "Clearances/90":    "clearances_p90",
+    "Pressures/90":     "pressures_p90",
+    "Dribbles/90":      "dribbles_p90",
+    "Dribble Success%": "dribble_success",
+    "Aerial Win%":      "aerial_win_pct",
+    "Fouls Won/90":     "fouls_won_p90",
+    "Fouls/90":         "fouls_p90",
+    # GK
+    "Save%":            "save_pct",
+    "Clean Sheet%":     "clean_sheet_pct",
+    "Goals Against/90": "ga_p90",
+    "PSxG-GA":          "psxg_net",
 }
 
 # Colour bands
