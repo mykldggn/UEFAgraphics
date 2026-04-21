@@ -1,6 +1,6 @@
 export const API_BASE = import.meta.env.VITE_API_URL ?? '/api'
 
-export const CURRENT_SEASON = 2024
+export const CURRENT_SEASON = 2025
 
 export const UNDERSTAT_LEAGUES = [
   { id: 'EPL',        label: 'Premier League' },
@@ -11,7 +11,7 @@ export const UNDERSTAT_LEAGUES = [
   { id: 'RFPL',       label: 'Russian Premier League' },
 ]
 
-export const SEASONS = [2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015]
+export const SEASONS = [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015]
 
 export type InfographicType =
   | 'shotmap'
