@@ -176,7 +176,11 @@ export default function LeaguePage() {
         posHistory && posHistory.history.length > 0 ? (
           <div className="space-y-4">
             <p className="text-xs text-sub">
-              League position after each match. Click a team name to highlight.
+              League position after each match played.
+              {posHistory.history.length < 34
+                ? ' Data reflects the current point in the season.'
+                : ''}
+              {' '}Click a team to highlight.
             </p>
             <ResponsiveContainer width="100%" height={480}>
               <LineChart data={posHistory.history}
@@ -224,7 +228,12 @@ export default function LeaguePage() {
             </div>
           </div>
         ) : (
-          !error && <div className="text-center py-16 text-sub text-sm">Position history not available for this league/season.</div>
+          !error && (
+            <div className="text-center py-16 space-y-2">
+              <p className="text-sub text-sm">Position history is only available for Understat leagues.</p>
+              <p className="text-sub/60 text-xs">Supported: Premier League · La Liga · Bundesliga · Serie A · Ligue 1</p>
+            </div>
+          )
         )
       )}
 
