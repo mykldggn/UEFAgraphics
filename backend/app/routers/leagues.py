@@ -91,15 +91,18 @@ def league_table(league_id: str, season: int = Query(...)):
                 sorted_teams = sorted(us_teams, key=lambda t: t.get("pts", 0), reverse=True)
                 table = [
                     {
-                        "rank":    i + 1,
-                        "team":    t["name"],
-                        "team_id": t["id"],
-                        "wins":    t.get("wins", 0),
-                        "draws":   t.get("draws", 0),
-                        "losses":  t.get("loses", 0),
-                        "points":  t.get("pts", 0),
-                        "xG":      t.get("xG"),
-                        "xGA":     t.get("xGA"),
+                        "rank":          i + 1,
+                        "team":          t["name"],
+                        "team_id":       t["id"],
+                        "played":        t.get("wins", 0) + t.get("draws", 0) + t.get("loses", 0),
+                        "wins":          t.get("wins", 0),
+                        "draws":         t.get("draws", 0),
+                        "losses":        t.get("loses", 0),
+                        "goals_for":     t.get("goals_for", 0),
+                        "goals_against": t.get("goals_against", 0),
+                        "goal_diff":     t.get("goals_for", 0) - t.get("goals_against", 0),
+                        "points":        t.get("pts", 0),
+                        "form":          t.get("form", ""),
                     }
                     for i, t in enumerate(sorted_teams)
                 ]

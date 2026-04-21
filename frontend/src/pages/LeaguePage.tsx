@@ -39,6 +39,23 @@ export default function LeaguePage() {
     { key: 'points',        label: 'Pts' },
   ].filter(c => table.length > 0 && table[0][c.key] != null)
 
+  function FormPills({ form }: { form: string }) {
+    if (!form) return <span className="text-sub">—</span>
+    return (
+      <div className="flex gap-0.5 justify-end">
+        {form.split('').map((r, i) => (
+          <span
+            key={i}
+            className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[9px] font-bold text-white
+              ${r === 'W' ? 'bg-green-500' : r === 'D' ? 'bg-amber-400' : 'bg-red-500'}`}
+          >
+            {r}
+          </span>
+        ))}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -73,6 +90,7 @@ export default function LeaguePage() {
                 {COLS.map(c => (
                   <th key={c.key} className="py-2 px-3 text-right">{c.label}</th>
                 ))}
+                <th className="py-2 px-3 text-right">Form</th>
               </tr>
             </thead>
             <tbody>
@@ -85,6 +103,9 @@ export default function LeaguePage() {
                       {row[c.key] != null ? String(row[c.key]) : '—'}
                     </td>
                   ))}
+                  <td className="py-2 px-3">
+                    <FormPills form={String(row.form ?? '')} />
+                  </td>
                 </tr>
               ))}
             </tbody>

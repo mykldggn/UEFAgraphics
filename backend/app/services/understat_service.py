@@ -266,7 +266,7 @@ def get_league_players(league: str, season: int) -> list[dict]:
 # ── Team data ──────────────────────────────────────────────────────────────────
 
 def get_league_teams(league: str, season: int) -> list[dict]:
-    ck = {"league": league, "season": season}
+    ck = {"league": league, "season": season, "v": 2}
     cached = cache.json_get("understat_league_teams", ck, ttl_hours=24)
     if cached is not None:
         return cached
@@ -277,20 +277,33 @@ def get_league_teams(league: str, season: int) -> list[dict]:
         return []
 
     teams_raw = data.get("teams", {}) or {}
-    teams = [
-        {
-            "id":    str(tid),
-            "name":  info.get("title", ""),
-            "xG":    float(info.get("xG", 0)),
-            "xGA":   float(info.get("xGA", 0)),
-            "xPts":  float(info.get("xpts", 0)),
-            "pts":   int(info.get("pts", 0)),
-            "wins":  int(info.get("wins", 0)),
-            "draws": int(info.get("draws", 0)),
-            "loses": int(info.get("loses", 0)),
-        }
-        for tid, info in teams_raw.items()
-    ]
+    teams = []
+    for tid, info in teams_raw.items():
+        history = info.get("history", [])
+        # Aggregate from per-match history (top-level fields absent for older seasons)
+        wins  = sum(int(m.get("wins",   0)) for m in history)
+        draws = sum(int(m.get("draws",  0)) for m in history)
+        loses = sum(int(m.get("loses",  0)) for m in history)
+        pts   = wins * 3 + draws
+        gf    = sum(int(m.get("scored", 0)) for m in history)
+        ga    = sum(int(m.get("missed", 0)) for m in history)
+        xg    = round(sum(float(m.get("xG",  0)) for m in history), 2)
+        xga   = round(sum(float(m.get("xGA", 0)) for m in history), 2)
+        form  = "".join(m.get("result", "").upper() for m in history[-5:])
+        teams.append({
+            "id":           str(tid),
+            "name":         info.get("title", ""),
+            "xG":           xg,
+            "xGA":          xga,
+            "xPts":         float(info.get("xpts", 0) or 0),
+            "pts":          pts,
+            "wins":         wins,
+            "draws":        draws,
+            "loses":        loses,
+            "goals_for":    gf,
+            "goals_against":ga,
+            "form":         form,
+        })
     cache.json_save("understat_league_teams", ck, teams)
     return teams
 

@@ -130,7 +130,7 @@ def get_standings(league_id: str, season: int) -> list[dict]:
             "goals_against": entry.get("goalsAgainst", 0),
             "goal_diff":     entry.get("goalDifference", 0),
             "points":        entry.get("points", 0),
-            "form":          entry.get("form", ""),
+            "form":          (entry.get("form", "") or "").replace(",", ""),
         })
 
     cache.json_save("fdorg_standings", ck, rows)
