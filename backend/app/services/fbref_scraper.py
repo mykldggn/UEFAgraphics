@@ -19,8 +19,8 @@ import time
 from typing import Optional
 
 import pandas as pd
-import requests
 from bs4 import BeautifulSoup, Comment
+from curl_cffi import requests as cffi_requests
 
 logger = logging.getLogger(__name__)
 
@@ -41,42 +41,17 @@ def _throttle() -> None:
         _last_req = time.time()
 
 
-# ── HTTP session ───────────────────────────────────────────────────────────────
-_USER_AGENTS = [
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_3) "
-    "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.3 Safari/605.1.15",
-]
-
-_session: Optional[requests.Session] = None
+# ── HTTP session (curl_cffi — Chrome TLS fingerprint, bypasses Cloudflare) ────
+_session: Optional[cffi_requests.Session] = None
 _session_lock = threading.Lock()
 
 
-def _get_session() -> requests.Session:
+def _get_session() -> cffi_requests.Session:
     global _session
     with _session_lock:
         if _session is None:
-            _session = requests.Session()
+            _session = cffi_requests.Session(impersonate="chrome")
         return _session
-
-
-def _headers() -> dict:
-    return {
-        "User-Agent":                random.choice(_USER_AGENTS),
-        "Accept":                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language":           "en-US,en;q=0.9",
-        "Accept-Encoding":           "gzip, deflate, br",
-        "Referer":                   "https://fbref.com/en/",
-        "Connection":                "keep-alive",
-        "Upgrade-Insecure-Requests": "1",
-        "Sec-Fetch-Dest":            "document",
-        "Sec-Fetch-Mode":            "navigate",
-        "Sec-Fetch-Site":            "same-origin",
-        "Cache-Control":             "max-age=0",
-    }
 
 
 # ── League map: our ID → (fbref numeric id, url slug) ─────────────────────────
@@ -140,10 +115,10 @@ def _main_url(league_id: str, season: int) -> str:
 # ── HTTP fetch ─────────────────────────────────────────────────────────────────
 
 def fetch_html(url: str) -> Optional[str]:
-    """Fetch a page with throttling + browser headers. Returns HTML or None."""
+    """Fetch a page with throttling + Chrome TLS impersonation. Returns HTML or None."""
     _throttle()
     try:
-        resp = _get_session().get(url, headers=_headers(), timeout=30)
+        resp = _get_session().get(url, timeout=30)
         if resp.status_code == 429:
             logger.warning(f"FBref 429 on {url} — backing off 60 s")
             time.sleep(60)
