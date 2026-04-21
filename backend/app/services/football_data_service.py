@@ -80,6 +80,9 @@ def _get(path: str) -> dict | None:
             headers={"X-Auth-Token": settings.FOOTBALL_DATA_KEY},
             timeout=15,
         )
+        if resp.status_code == 403:
+            logger.warning(f"football-data {path}: season restricted to free-tier (current+previous only)")
+            return None
         if resp.status_code == 429:
             logger.warning("football-data.org rate limited (10 req/min)")
             return None

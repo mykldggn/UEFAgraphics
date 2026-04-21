@@ -81,12 +81,31 @@ def league_table(league_id: str, season: int = Query(...)):
         raise HTTPException(404, f"Unknown league: {league_id}")
 
     table = fdorg.get_standings(league_id, season)
+
+    # Fallback: build table from Understat for older seasons or non-fdorg leagues
     if not table:
-        raise HTTPException(
-            503,
-            "League table unavailable — set FOOTBALL_DATA_KEY in .env "
-            "(free at football-data.org)"
-        )
+        us_slug = understat.LEAGUE_TO_US.get(league_id)
+        if us_slug:
+            us_teams = understat.get_league_teams(us_slug, season)
+            if us_teams:
+                sorted_teams = sorted(us_teams, key=lambda t: t.get("pts", 0), reverse=True)
+                table = [
+                    {
+                        "rank":    i + 1,
+                        "team":    t["name"],
+                        "team_id": t["id"],
+                        "wins":    t.get("wins", 0),
+                        "draws":   t.get("draws", 0),
+                        "losses":  t.get("loses", 0),
+                        "points":  t.get("pts", 0),
+                        "xG":      t.get("xG"),
+                        "xGA":     t.get("xGA"),
+                    }
+                    for i, t in enumerate(sorted_teams)
+                ]
+
+    if not table:
+        raise HTTPException(503, "League table unavailable for this season")
     return {"league": league_id, "season": season, "table": table}
 
 
