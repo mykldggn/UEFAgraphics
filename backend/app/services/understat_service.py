@@ -310,7 +310,7 @@ def get_league_teams(league: str, season: int) -> list[dict]:
 
 def get_league_position_history(league: str, season: int) -> dict:
     """Return each team's league position at every matchday of the season."""
-    ck = {"league": league, "season": season, "type": "pos_history", "v": 1}
+    ck = {"league": league, "season": season, "type": "pos_history", "v": 2}
     cached = cache.json_get("understat_pos_history", ck, ttl_hours=6)
     if cached is not None:
         return cached
@@ -349,8 +349,7 @@ def get_league_position_history(league: str, season: int) -> dict:
         ranked = sorted(pts_map, key=lambda t: pts_map[t], reverse=True)
         row: dict = {"match": gw + 1}
         for pos, name in enumerate(ranked, 1):
-            if gw < len(team_series[name]):   # only include teams that have played
-                row[name] = pos
+            row[name] = pos
         history_rows.append(row)
 
     result = {"teams": sorted(team_series.keys()), "history": history_rows}
