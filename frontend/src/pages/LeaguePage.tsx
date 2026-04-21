@@ -39,10 +39,10 @@ export default function LeaguePage() {
     { key: 'points',        label: 'Pts' },
   ].filter(c => table.length > 0 && table[0][c.key] != null)
 
-  const FORM_COLOR: Record<string, string> = {
-    W: 'bg-green-500',
-    D: 'bg-amber-400',
-    L: 'bg-red-500',
+  const FORM_BG: Record<string, string> = {
+    W: '#22C55E',
+    D: '#F59E0B',
+    L: '#EF4444',
   }
 
   function FormPills({ form }: { form: string }) {
@@ -53,7 +53,8 @@ export default function LeaguePage() {
         {chars.map((r, i) => (
           <span
             key={i}
-            className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[9px] font-bold text-white ${FORM_COLOR[r] ?? 'bg-gray-500'}`}
+            style={{ backgroundColor: FORM_BG[r] ?? '#6B7280' }}
+            className="inline-flex items-center justify-center w-4 h-4 rounded-sm text-[9px] font-bold text-white"
           >
             {r}
           </span>
