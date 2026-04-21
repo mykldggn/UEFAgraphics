@@ -95,7 +95,7 @@ def _get(path: str) -> dict | None:
 
 def get_standings(league_id: str, season: int) -> list[dict]:
     """Return sorted standings table as list of dicts."""
-    ck = {"src": "fdorg", "league": league_id, "season": season}
+    ck = {"src": "fdorg", "league": league_id, "season": season, "v": 2}
     cached = cache.json_get("fdorg_standings", ck, ttl_hours=6)
     if cached is not None:
         return cached

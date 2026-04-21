@@ -39,15 +39,21 @@ export default function LeaguePage() {
     { key: 'points',        label: 'Pts' },
   ].filter(c => table.length > 0 && table[0][c.key] != null)
 
+  const FORM_COLOR: Record<string, string> = {
+    W: 'bg-green-500',
+    D: 'bg-amber-400',
+    L: 'bg-red-500',
+  }
+
   function FormPills({ form }: { form: string }) {
-    if (!form) return <span className="text-sub">—</span>
+    const chars = form.replace(/[^WDLwdl]/gi, '').toUpperCase().split('')
+    if (!chars.length) return <span className="text-sub">—</span>
     return (
-      <div className="flex gap-0.5 justify-end">
-        {form.split('').map((r, i) => (
+      <div className="flex gap-1 justify-end">
+        {chars.map((r, i) => (
           <span
             key={i}
-            className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[9px] font-bold text-white
-              ${r === 'W' ? 'bg-green-500' : r === 'D' ? 'bg-amber-400' : 'bg-red-500'}`}
+            className={`inline-flex items-center justify-center w-4 h-4 rounded-sm text-[9px] font-bold text-white ${FORM_COLOR[r] ?? 'bg-gray-500'}`}
           >
             {r}
           </span>
