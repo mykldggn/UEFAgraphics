@@ -48,6 +48,23 @@ export const leaguesApi = {
   table: (leagueId: string, season: number) =>
     request<{ table: TableRow[] }>(`/leagues/${leagueId}/table`, { season }),
 
+  positionHistory: (leagueId: string, season: number) =>
+    request<{ teams: string[]; history: Record<string, number>[] }>(
+      `/leagues/${leagueId}/position-history`, { season }
+    ),
+
+  leaders: (leagueId: string, season: number) =>
+    request<{
+      goals: LeaderEntry[]; assists: LeaderEntry[]; xg: LeaderEntry[];
+      key_passes: LeaderEntry[]; shots: LeaderEntry[];
+    }>(`/leagues/${leagueId}/leaders`, { season }),
+
   teamXgHistory: (teamId: string, season: number) =>
     request<{ history: unknown[] }>(`/leagues/understat/team/${teamId}/xg-history`, { season }),
+}
+
+export interface LeaderEntry {
+  player: string
+  team: string
+  value: number
 }

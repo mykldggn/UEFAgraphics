@@ -308,6 +308,91 @@ def get_league_teams(league: str, season: int) -> list[dict]:
     return teams
 
 
+def get_league_position_history(league: str, season: int) -> dict:
+    """Return each team's league position at every matchday of the season."""
+    ck = {"league": league, "season": season, "type": "pos_history", "v": 1}
+    cached = cache.json_get("understat_pos_history", ck, ttl_hours=6)
+    if cached is not None:
+        return cached
+
+    _get_session().get(f"{API_BASE}/league/{league}/{season}", timeout=30)
+    data = _ajax(f"getLeagueData/{league}/{season}", f"league/{league}/{season}")
+    if not data or not isinstance(data, dict):
+        return {}
+
+    teams_raw = data.get("teams", {}) or {}
+    # Build cumulative pts series per team
+    team_series: dict[str, list[int]] = {}
+    for _tid, info in teams_raw.items():
+        history = info.get("history", [])
+        name = info.get("title", "")
+        if not name:
+            continue
+        cum = 0
+        series = []
+        for m in history:
+            cum += int(m.get("pts", 0))
+            series.append(cum)
+        team_series[name] = series
+
+    if not team_series:
+        return {}
+
+    max_games = max(len(s) for s in team_series.values())
+    # Wide format: [{match: 1, "Arsenal": 1, "Man City": 3, ...}, ...]
+    history_rows = []
+    for gw in range(max_games):
+        pts_map = {
+            name: series[gw] if gw < len(series) else (series[-1] if series else 0)
+            for name, series in team_series.items()
+        }
+        ranked = sorted(pts_map, key=lambda t: pts_map[t], reverse=True)
+        row: dict = {"match": gw + 1}
+        for pos, name in enumerate(ranked, 1):
+            if gw < len(team_series[name]):   # only include teams that have played
+                row[name] = pos
+        history_rows.append(row)
+
+    result = {"teams": sorted(team_series.keys()), "history": history_rows}
+    cache.json_save("understat_pos_history", ck, result)
+    return result
+
+
+def get_league_leaders(league: str, season: int) -> dict:
+    """Top 10 players in goals, assists, xG, key passes for a league-season."""
+    ck = {"league": league, "season": season, "type": "leaders"}
+    cached = cache.json_get("understat_leaders", ck, ttl_hours=6)
+    if cached is not None:
+        return cached
+
+    stats = get_league_player_stats(league, season)
+    if not stats:
+        return {}
+
+    def top(key: str, n: int = 10) -> list[dict]:
+        return [
+            {"player": p["player"], "team": p["team"], "value": p.get(key, 0)}
+            for p in sorted(
+                [p for p in stats if float(p.get(key, 0) or 0) > 0],
+                key=lambda p: float(p.get(key, 0) or 0),
+                reverse=True,
+            )[:n]
+        ]
+
+    result = {
+        "goals":      top("goals"),
+        "assists":    top("assists"),
+        "xg":         [{"player": p["player"], "team": p["team"],
+                        "value": round(float(p.get("xg", 0)), 2)}
+                       for p in sorted(stats, key=lambda p: float(p.get("xg", 0) or 0), reverse=True)
+                       if float(p.get("xg", 0) or 0) > 0][:10],
+        "key_passes": top("key_passes"),
+        "shots":      top("shots"),
+    }
+    cache.json_save("understat_leaders", ck, result)
+    return result
+
+
 def get_team_shots(team_id: str, season: int) -> pd.DataFrame:
     ck = {"team_id": team_id, "season": season}
     cached = cache.json_get("understat_team_shots", ck, ttl_hours=12)

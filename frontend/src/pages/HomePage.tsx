@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Select from '../components/ui/Select'
 import SearchInput from '../components/ui/SearchInput'
 import { leaguesApi, type League, type Team } from '../api/leagues'
-import { SEASONS, UNDERSTAT_LEAGUES } from '../utils/constants'
+import { SEASONS, UNDERSTAT_LEAGUES, CURRENT_SEASON } from '../utils/constants'
 
 const SEASON_OPTS  = SEASONS.map(s => ({ value: s, label: `${s}/${String(s + 1).slice(-2)}` }))
 const LEAGUE_TABS  = ['Player', 'Team', 'League'] as const
@@ -14,7 +14,7 @@ export default function HomePage() {
   const [tab, setTab]             = useState<Tab>('Player')
   const [leagues, setLeagues]     = useState<League[]>([])
   const [leagueId, setLeagueId]   = useState('ENG-1')
-  const [season, setSeason]       = useState(2024)
+  const [season, setSeason]       = useState(CURRENT_SEASON)
   const [teams, setTeams]         = useState<Team[]>([])
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
 
@@ -47,8 +47,8 @@ export default function HomePage() {
           UEFA<span className="text-accent">graphics</span>
         </h1>
         <p className="text-sub text-sm">
-          Football infographics — shot maps, radars, xG timelines and more.
-          Powered by FBref and Understat.
+          Football analytics — shot maps, radars, xG timelines, league tables and more.
+          Data from Understat &amp; football-data.org. No login required.
         </p>
       </div>
 
@@ -133,12 +133,15 @@ export default function HomePage() {
         )}
       </div>
 
-      {/* Quick links */}
-      <div className="grid grid-cols-3 gap-3 text-center">
+      {/* Feature cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-center">
         {[
-          { emoji: '🎯', title: 'Shot Maps',   desc: 'xG, distance, goal/no-goal' },
-          { emoji: '🍕', title: 'Radars',      desc: 'Percentile pizza charts' },
-          { emoji: '📈', title: 'xG Timeline', desc: 'Season xG for & against' },
+          { emoji: '🎯', title: 'Shot Maps',       desc: 'xG, distance, goal/no-goal' },
+          { emoji: '🍕', title: 'Radars',           desc: 'Per-90 percentile pizza charts' },
+          { emoji: '📈', title: 'Career xG',        desc: 'Cumulative xG vs goals' },
+          { emoji: '📋', title: 'Summary Cards',    desc: 'Season stats at a glance' },
+          { emoji: '⚡', title: 'xG Timeline',      desc: 'Match-by-match xG for & against' },
+          { emoji: '🏆', title: 'League Tables',    desc: 'Standings, form & leader boards' },
         ].map(({ emoji, title, desc }) => (
           <div key={title} className="bg-card border border-border rounded-lg p-4 space-y-1">
             <div className="text-2xl">{emoji}</div>

@@ -112,6 +112,28 @@ def league_table(league_id: str, season: int = Query(...)):
     return {"league": league_id, "season": season, "table": table}
 
 
+@router.get("/{league_id}/position-history")
+def league_position_history(league_id: str, season: int = Query(...)):
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        raise HTTPException(400, "Position history only available for Understat leagues")
+    result = understat.get_league_position_history(us_slug, season)
+    if not result:
+        raise HTTPException(503, "Could not load position history")
+    return {"league": league_id, "season": season, **result}
+
+
+@router.get("/{league_id}/leaders")
+def league_leaders(league_id: str, season: int = Query(...)):
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        raise HTTPException(400, "Leaders only available for Understat leagues")
+    result = understat.get_league_leaders(us_slug, season)
+    if not result:
+        raise HTTPException(503, "Could not load league leaders")
+    return {"league": league_id, "season": season, **result}
+
+
 @router.get("/understat/team/{team_id}/xg-history")
 def team_xg_history(team_id: str, season: int = Query(...)):
     history = understat.get_team_xg_history(team_id, season)
