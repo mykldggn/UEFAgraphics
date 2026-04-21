@@ -267,7 +267,8 @@ def get_league_players(league: str, season: int) -> list[dict]:
 
 def get_league_teams(league: str, season: int) -> list[dict]:
     ck = {"league": league, "season": season, "v": 2}
-    cached = cache.json_get("understat_league_teams", ck, ttl_hours=24)
+    ttl = 2 if season >= CURRENT_SEASON else 24 * 7
+    cached = cache.json_get("understat_league_teams", ck, ttl_hours=ttl)
     if cached is not None:
         return cached
 
@@ -308,10 +309,13 @@ def get_league_teams(league: str, season: int) -> list[dict]:
     return teams
 
 
+CURRENT_SEASON = 2025
+
 def get_league_position_history(league: str, season: int) -> dict:
     """Return each team's league position at every matchday of the season."""
     ck = {"league": league, "season": season, "type": "pos_history", "v": 2}
-    cached = cache.json_get("understat_pos_history", ck, ttl_hours=6)
+    ttl = 2 if season >= CURRENT_SEASON else 24 * 7  # 2h for live season, 1wk for finished
+    cached = cache.json_get("understat_pos_history", ck, ttl_hours=ttl)
     if cached is not None:
         return cached
 
@@ -360,7 +364,8 @@ def get_league_position_history(league: str, season: int) -> dict:
 def get_league_leaders(league: str, season: int) -> dict:
     """Top 10 players in goals, assists, xG, key passes for a league-season."""
     ck = {"league": league, "season": season, "type": "leaders"}
-    cached = cache.json_get("understat_leaders", ck, ttl_hours=6)
+    ttl = 2 if season >= CURRENT_SEASON else 24 * 7
+    cached = cache.json_get("understat_leaders", ck, ttl_hours=ttl)
     if cached is not None:
         return cached
 

@@ -5,7 +5,7 @@ async function request<T>(path: string, params?: Record<string, string | number>
   if (params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)))
   }
-  const res = await fetch(url.toString())
+  const res = await fetch(url.toString(), { cache: 'no-store' })
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
     throw new Error(`${res.status}: ${text}`)

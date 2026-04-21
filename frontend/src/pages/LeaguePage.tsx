@@ -183,9 +183,19 @@ export default function LeaguePage() {
               {' '}Click a team to highlight.
             </p>
             <ResponsiveContainer width="100%" height={480}>
-              <LineChart data={posHistory.history}
-                margin={{ top: 10, right: 10, bottom: 10, left: 0 }}>
-                <XAxis dataKey="match" tick={{ fill: '#9CA3AF', fontSize: 10 }}
+              <LineChart data={posHistory.history} layout="horizontal"
+                margin={{ top: 10, right: 30, bottom: 20, left: 10 }}>
+                <XAxis dataKey="match" type="number"
+                  domain={[1, posHistory.history.length]}
+                  ticks={(() => {
+                    const n = posHistory.history.length
+                    const step = n <= 20 ? 1 : n <= 38 ? 2 : 4
+                    const t: number[] = []
+                    for (let i = 1; i <= n; i += step) t.push(i)
+                    if (t[t.length - 1] !== n) t.push(n)
+                    return t
+                  })()}
+                  tick={{ fill: '#9CA3AF', fontSize: 10 }}
                   label={{ value: 'Match', position: 'insideBottom', offset: -4, fill: '#9CA3AF', fontSize: 10 }} />
                 <YAxis reversed domain={[1, numTeams]} tickCount={numTeams}
                   tick={{ fill: '#9CA3AF', fontSize: 10 }}
@@ -200,11 +210,12 @@ export default function LeaguePage() {
                   <ReferenceLine key={pos} y={pos} stroke="#1F2937" strokeDasharray="3 3" />
                 ))}
                 {posHistory.teams.map(team => (
-                  <Line key={team} type="monotone" dataKey={team}
+                  <Line key={team} type="linear" dataKey={team}
                     stroke={teamColorMap[team]}
                     strokeWidth={focusTeam === null ? 1.5 : focusTeam === team ? 2.5 : 0.5}
                     opacity={focusTeam === null ? 0.85 : focusTeam === team ? 1 : 0.15}
                     dot={false} connectNulls activeDot={{ r: 4 }}
+                    isAnimationActive={false}
                   />
                 ))}
               </LineChart>
