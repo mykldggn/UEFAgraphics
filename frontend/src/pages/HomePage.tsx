@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import Select from '../components/ui/Select'
 import SearchInput from '../components/ui/SearchInput'
 import { leaguesApi, type League, type Team } from '../api/leagues'
-import { SEASONS, UNDERSTAT_LEAGUES, CURRENT_SEASON } from '../utils/constants'
+import { SEASONS, CURRENT_SEASON } from '../utils/constants'
 
 const SEASON_OPTS  = SEASONS.map(s => ({ value: s, label: `${s}/${String(s + 1).slice(-2)}` }))
 const LEAGUE_TABS  = ['Player', 'Team', 'League'] as const
