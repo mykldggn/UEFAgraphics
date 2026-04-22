@@ -1,11 +1,18 @@
 import { API_BASE } from '../utils/constants'
 
-async function request<T>(path: string, params?: Record<string, string | number>): Promise<T> {
-  const url = new URL(`${API_BASE}${path}`, window.location.origin)
+function buildUrl(path: string, params?: Record<string, string | number>): string {
+  // API_BASE may be absolute (https://...) or relative (/api).
+  // Use window.location.origin as base only for relative paths.
+  const base = API_BASE.startsWith('http') ? API_BASE : `${window.location.origin}${API_BASE}`
+  const url = new URL(path, base + '/')
   if (params) {
     Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)))
   }
-  const res = await fetch(url.toString(), { cache: 'no-store' })
+  return url.toString()
+}
+
+async function request<T>(path: string, params?: Record<string, string | number>): Promise<T> {
+  const res = await fetch(buildUrl(path, params), { cache: 'no-store' })
   if (!res.ok) {
     const text = await res.text().catch(() => res.statusText)
     throw new Error(`${res.status}: ${text}`)
@@ -15,11 +22,7 @@ async function request<T>(path: string, params?: Record<string, string | number>
 
 /** Return a full URL string for an infographic image (PNG). */
 export function imgUrl(path: string, params?: Record<string, string | number>): string {
-  const url = new URL(`${API_BASE}${path}`, window.location.origin)
-  if (params) {
-    Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, String(v)))
-  }
-  return url.toString()
+  return buildUrl(path, params)
 }
 
 export default request
