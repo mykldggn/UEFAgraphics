@@ -11,6 +11,7 @@ const SEASON_OPTS = SEASONS.map(s => ({ value: s, label: `${s}/${String(s + 1).s
 const TABS = [
   { id: 'xg-timeline', label: 'xG Timeline' },
   { id: 'season-card', label: 'Season Card' },
+  { id: 'lineup',      label: 'Most Played XI' },
 ]
 
 export default function TeamPage() {
@@ -20,7 +21,7 @@ export default function TeamPage() {
   const leagueId     = params.get('league') ?? 'ENG-1'
 
   const [activeTab, setActiveTab] = useState('xg-timeline')
-  const [season, setSeason]       = useState(Number(params.get('season') ?? 2024))
+  const [season, setSeason]       = useState(Number(params.get('season') ?? 2025))
 
   if (!teamId) return null
 
@@ -30,6 +31,8 @@ export default function TeamPage() {
         return infographicsApi.teamXgTimeline(teamId!, teamName, leagueId, season)
       case 'season-card':
         return infographicsApi.teamSeasonCard(teamId!, teamName, leagueId, season)
+      case 'lineup':
+        return infographicsApi.teamLineup(teamId!, teamName, leagueId, season)
       default:
         return ''
     }

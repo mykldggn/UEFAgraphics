@@ -2,8 +2,8 @@ import { imgUrl } from './client'
 
 export const infographicsApi = {
   // Player (Understat)
-  shotmap: (playerId: string, season: number) =>
-    imgUrl(`/infographics/player/${playerId}/shotmap`, { season }),
+  shotmap: (playerId: string, season?: number) =>
+    imgUrl(`/infographics/player/${playerId}/shotmap`, season != null ? { season } : {}),
 
   careerXg: (playerId: string, seasons?: number[]) =>
     imgUrl(`/infographics/player/${playerId}/career-xg`,
@@ -16,8 +16,12 @@ export const infographicsApi = {
     return imgUrl(`/infographics/player/${playerId}/radar`, params)
   },
 
-  summaryCard: (playerId: string, leagueId: string, season: number, position: string) =>
-    imgUrl(`/infographics/player/${playerId}/summary-card`, { league_id: leagueId, season, position }),
+  summaryCard: (playerId: string, leagueId: string, season?: number, position?: string) => {
+    const params: Record<string, string | number> = { league_id: leagueId }
+    if (season != null) params.season = season
+    if (position)       params.position = position
+    return imgUrl(`/infographics/player/${playerId}/summary-card`, params)
+  },
 
   // Team (Understat)
   teamXgTimeline: (teamId: string, teamName: string, leagueId: string, season: number) =>
@@ -26,4 +30,7 @@ export const infographicsApi = {
   // Team (API-Football)
   teamSeasonCard: (teamId: string, teamName: string, leagueId: string, season: number) =>
     imgUrl(`/infographics/team/${teamId}/season-card`, { team_name: teamName, league_id: leagueId, season }),
+
+  teamLineup: (teamId: string, teamName: string, leagueId: string, season: number) =>
+    imgUrl(`/infographics/team/${teamId}/lineup`, { team_name: teamName, league_id: leagueId, season }),
 }

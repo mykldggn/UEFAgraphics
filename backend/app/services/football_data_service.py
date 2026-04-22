@@ -160,6 +160,21 @@ def get_teams(league_id: str, season: int) -> list[dict]:
     return teams
 
 
+def get_team_coach(fdorg_team_id: str) -> str:
+    """Return the current head coach name for a team."""
+    ck = {"src": "fdorg", "team_id": fdorg_team_id, "type": "coach"}
+    cached = cache.json_get("fdorg_team_coach", ck, ttl_hours=24)
+    if cached is not None:
+        return cached.get("name", "")
+
+    data = _get(f"teams/{fdorg_team_id}")
+    if not data:
+        return ""
+    name = data.get("coach", {}).get("name", "")
+    cache.json_save("fdorg_team_coach", ck, {"name": name})
+    return name
+
+
 def get_top_scorers(league_id: str, season: int, limit: int = 10) -> list[dict]:
     """Return top scorers for a league+season."""
     ck = {"src": "fdorg", "league": league_id, "season": season}

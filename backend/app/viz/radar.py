@@ -121,16 +121,16 @@ def render(
     fig.patch.set_facecolor(BG)
 
     # Title
-    fig.text(0.515, 0.975, player_name, ha="center", va="top",
+    fig.text(0.515, 0.982, player_name, ha="center", va="top",
              fontsize=18, fontproperties=font, color=TEXT, fontweight="bold")
-    fig.text(0.515, 0.955, f"{season_label}  ·  {team}" if team else season_label,
+    fig.text(0.515, 0.948, f"{season_label}  ·  {team}" if team else season_label,
              ha="center", va="top", fontsize=11, fontproperties=font, color=TEXT_SUB)
-    fig.text(0.515, 0.025, "Percentile vs league peers  ·  Data: FBref  ·  UEFAgraphics",
+    fig.text(0.515, 0.025, "Percentile vs league peers  ·  Data: Understat  ·  UEFAgraphics",
              ha="center", va="bottom", fontsize=8, fontproperties=font, color="#374151")
 
-    # Legend pills
+    # Legend pills — placed below subtitle with enough clearance
     for xi, (label, col) in enumerate(SLICE_COLORS.items()):
-        fig.text(0.30 + xi * 0.14, 0.935,
+        fig.text(0.28 + xi * 0.16, 0.905,
                  {"high": "Top 20%", "mid": "Top 60%", "low": "Bottom 40%"}[label],
                  ha="center", fontsize=8, color=col, fontproperties=font,
                  bbox=dict(facecolor=BG_CARD, edgecolor=col, boxstyle="round,pad=0.3", lw=1))

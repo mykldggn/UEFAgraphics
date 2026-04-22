@@ -76,28 +76,26 @@ def render(
             (l, b), w * fill, h, boxstyle="round,pad=0.002",
             facecolor=color, edgecolor="none", alpha=0.85))
 
-    BLOCKS = [
+    ALL_BLOCKS = [
         # (label, value_str, bar_value, bar_max, bar_color)
-        ("Goals",         s("goals", ".0f"),        stats.get("goals", 0),        30,  GREEN),
-        ("Assists",       s("assists", ".0f"),       stats.get("assists", 0),      20,  ACCENT),
-        ("xG",            s("xG"),                   stats.get("xG", 0),           25,  GREEN),
-        ("xA",            s("xA"),                   stats.get("xA", 0),           20,  ACCENT),
-        ("npxG",          s("npxG"),                 stats.get("npxG", 0),         25,  GREEN),
-        ("Key Passes",    s("key_passes", ".0f"),    stats.get("key_passes", 0),   100, ACCENT),
-        ("Prog Passes",   s("prog_passes", ".0f"),   stats.get("prog_passes", 0),  200, ACCENT),
-        ("Pass Cmp%",     s("pass_cmp_pct", ".1f"),  stats.get("pass_cmp_pct", 0), 100, ACCENT),
-        ("Tackles",       s("tackles", ".0f"),       stats.get("tackles", 0),      100, AMBER),
-        ("Interceptions", s("interceptions", ".0f"), stats.get("interceptions", 0),60,  AMBER),
-        ("Pressures",     s("pressures", ".0f"),     stats.get("pressures", 0),    400, AMBER),
-        ("Dribbles",      s("dribbles", ".0f"),      stats.get("dribbles", 0),     80,  PRIMARY := primary),
+        ("Goals",         s("goals", ".0f"),        stats.get("goals"),        30,  primary),
+        ("Assists",       s("assists", ".0f"),       stats.get("assists"),      20,  primary),
+        ("xG",            s("xG"),                   stats.get("xG"),           25,  primary),
+        ("xA",            s("xA"),                   stats.get("xA"),           20,  primary),
+        ("npxG",          s("npxG"),                 stats.get("npxG"),         25,  primary),
+        ("Key Passes",    s("key_passes", ".0f"),    stats.get("key_passes"),   100, primary),
+        ("Prog Passes",   s("prog_passes", ".0f"),   stats.get("prog_passes"),  200, primary),
+        ("Pass Cmp%",     s("pass_cmp_pct", ".1f"),  stats.get("pass_cmp_pct"), 100, primary),
+        ("Tackles",       s("tackles", ".0f"),       stats.get("tackles"),      100, primary),
+        ("Interceptions", s("interceptions", ".0f"), stats.get("interceptions"), 60, primary),
+        ("Pressures",     s("pressures", ".0f"),     stats.get("pressures"),    400, primary),
+        ("Dribbles",      s("dribbles", ".0f"),      stats.get("dribbles"),      80, primary),
     ]
+    # Only render blocks where data is actually available
+    BLOCKS = [(lbl, val, bv, bm, bc) for (lbl, val, bv, bm, bc) in ALL_BLOCKS if val != "—"]
 
-    # 4 rows × 3 cols
     n_cols = 3
-    n_rows = 4
-    cell_w = 1 / n_cols
-    cell_h = 0.62 / n_rows  # total card area height for grid
-    grid_top = 0.82  # in figure coords
+    n_rows = max(1, -(-len(BLOCKS) // n_cols))  # ceiling division
 
     ax_cards = fig.add_axes([0, 0.18, 1, 0.66])
     ax_cards.set_facecolor(BG); ax_cards.axis("off")
@@ -121,7 +119,7 @@ def render(
         cx = x0 + card_w_norm / 2
         # Stat value
         ax_cards.text(cx, y0 + card_h_norm * 0.72, val_str,
-                      fontsize=18, fontproperties=font, color=TEXT,
+                      fontsize=18, fontproperties=font, color=primary,
                       fontweight="bold", ha="center", va="center")
         # Label
         ax_cards.text(cx, y0 + card_h_norm * 0.40, label,
@@ -157,7 +155,7 @@ def render(
     # ── Footer ─────────────────────────────────────────────────────────────────
     ax_foot = fig.add_axes([0, 0, 1, 0.07])
     ax_foot.set_facecolor(BG); ax_foot.axis("off")
-    ax_foot.text(0.5, 0.5, "Data: FBref  ·  UEFAgraphics",
+    ax_foot.text(0.5, 0.5, "Data: Understat  ·  UEFAgraphics",
                  fontsize=8, color="#374151", ha="center", va="center",
                  fontproperties=font)
 

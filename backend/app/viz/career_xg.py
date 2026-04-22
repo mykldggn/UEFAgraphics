@@ -53,6 +53,8 @@ def render(
         .reset_index()
     )
 
+    single_season = len(season_stats) == 1
+
     fig = plt.figure(figsize=(10, 8), facecolor=BG)
 
     # ── Top: cumulative line chart ─────────────────────────────────────────────
@@ -99,17 +101,19 @@ def render(
                  fontsize=10, ha="right", fontproperties=font,
                  bbox=dict(facecolor=BG_CARD, edgecolor=diff_color, boxstyle="round,pad=0.3", lw=1))
 
-    # ── Bottom: per-season bar chart ───────────────────────────────────────────
+    # ── Bottom: per-season bar chart ──────────────────────────────────────────
     ax_bar = fig.add_axes([0.08, 0.06, 0.88, 0.32])
     ax_bar.set_facecolor(BG)
     for spine in ax_bar.spines.values():
         spine.set_edgecolor("#374151")
 
-    xs = np.arange(len(season_stats))
-    bar_w = 0.35
-    ax_bar.bar(xs - bar_w / 2, season_stats["xG"],    width=bar_w, color=ACCENT,
-               alpha=0.85, label="xG",   zorder=3)
-    ax_bar.bar(xs + bar_w / 2, season_stats["goals"],  width=bar_w, color=GREEN,
+    n_seasons = len(season_stats)
+    xs = np.arange(n_seasons)
+    # Narrow bars for single season so they don't stretch wall-to-wall
+    bar_w = 0.35 if n_seasons > 1 else 0.15
+    ax_bar.bar(xs - bar_w / 2, season_stats["xG"],   width=bar_w, color=ACCENT,
+               alpha=0.85, label="xG",    zorder=3)
+    ax_bar.bar(xs + bar_w / 2, season_stats["goals"], width=bar_w, color=GREEN,
                alpha=0.85, label="Goals", zorder=3)
 
     for i, (_, row) in enumerate(season_stats.iterrows()):
@@ -126,11 +130,14 @@ def render(
     ax_bar.set_ylabel("Per Season", color=TEXT_SUB, fontsize=9, fontproperties=font)
     ax_bar.legend(frameon=False, labelcolor=TEXT, prop=font, fontsize=9)
     ax_bar.grid(axis="y", color="#1F2937", lw=0.8)
+    # For single season, constrain x-axis so bars sit centred rather than filling the width
+    if n_seasons == 1:
+        ax_bar.set_xlim(-0.5, 0.5)
 
     # ── Title ──────────────────────────────────────────────────────────────────
     fig.text(0.5, 0.97, player_name, fontsize=18, fontproperties=font,
              color=TEXT, ha="center", va="top", fontweight="bold")
-    fig.text(0.5, 0.955, "Career xG vs Goals",
+    fig.text(0.5, 0.940, "Career xG vs Goals",
              fontsize=11, fontproperties=font, color=TEXT_SUB, ha="center", va="top")
     fig.text(0.5, 0.015, "Data: Understat  ·  UEFAgraphics",
              fontsize=8, color="#374151", ha="center", va="bottom", fontproperties=font)

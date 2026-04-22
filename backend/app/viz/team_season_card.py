@@ -12,7 +12,7 @@ import numpy as np
 import pandas as pd
 
 from app.viz.common import (
-    BG, BG_CARD, TEXT, TEXT_SUB, ACCENT, GREEN, RED, AMBER,
+    BG, BG_CARD, TEXT, TEXT_SUB,
     fig_to_png, get_font, team_color,
 )
 
@@ -44,7 +44,7 @@ def render(
                 fontsize=10, fontproperties=font, color=TEXT_SUB, va="top")
 
     # ── League position over time ──────────────────────────────────────────────
-    ax_pos = fig.add_axes([0.08, 0.62, 0.88, 0.26])
+    ax_pos = fig.add_axes([0.08, 0.63, 0.88, 0.25])
     ax_pos.set_facecolor(BG)
     for sp in ax_pos.spines.values():
         sp.set_edgecolor("#374151")
@@ -81,45 +81,65 @@ def render(
         except (ValueError, TypeError):
             return str(val)
 
+    # Derive a subtle tinted card background from primary color
+    import matplotlib.colors as mcolors
+    try:
+        pr = mcolors.to_rgb(primary)
+        card_bg = mcolors.to_hex(tuple(min(1.0, c * 0.18 + 0.07) for c in pr))
+        card_edge = mcolors.to_hex(tuple(min(1.0, c * 0.45 + 0.06) for c in pr))
+    except Exception:
+        card_bg   = BG_CARD
+        card_edge = "#1F2937"
+
     STAT_BLOCKS = [
-        ("W",          sv("wins"),          GREEN),
-        ("D",          sv("draws"),         AMBER),
-        ("L",          sv("losses"),        RED),
-        ("GF",         sv("goals_for"),     GREEN),
-        ("GA",         sv("goals_against"), RED),
-        ("GD",         sv("goal_diff", "+.0f"), ACCENT),
-        ("xG",         sv("xG", ".1f"),     GREEN),
-        ("xGA",        sv("xGA", ".1f"),    RED),
-        ("xPts",       sv("xPts", ".1f"),   ACCENT),
-        ("Pts",        sv("points"),        primary),
-        ("Clean Sheets", sv("clean_sheets"), GREEN),
-        ("Pos",        sv("final_position", ".0f"), primary),
+        ("W",            sv("wins")),
+        ("D",            sv("draws")),
+        ("L",            sv("losses")),
+        ("GF",           sv("goals_for")),
+        ("GA",           sv("goals_against")),
+        ("GD",           sv("goal_diff", "+.0f")),
+        ("xG",           sv("xG", ".1f")),
+        ("xGA",          sv("xGA", ".1f")),
+        ("xPts",         sv("xPts", ".1f")),
+        ("Pts",          sv("points")),
+        ("Clean Sheets", sv("clean_sheets")),
+        ("Pos",          sv("final_position", ".0f")),
     ]
 
-    ax_stats = fig.add_axes([0.02, 0.38, 0.96, 0.22])
+    ax_stats = fig.add_axes([0.02, 0.39, 0.96, 0.21])
     ax_stats.set_facecolor(BG); ax_stats.axis("off")
     ax_stats.set_xlim(0, 1); ax_stats.set_ylim(0, 1)
     n_cols = 6; n_rows = 2
     pad = 0.010
     cw = 1 / n_cols; ch = 1 / n_rows
 
-    for idx, (label, val, col) in enumerate(STAT_BLOCKS):
+    for idx, (label, val) in enumerate(STAT_BLOCKS):
         r = idx // n_cols; c = idx % n_cols
         x0 = c * cw + pad; y0 = 1 - (r + 1) * ch + pad
         ax_stats.add_patch(mpatches.FancyBboxPatch(
             (x0, y0), cw - 2 * pad, ch - 2 * pad,
-            boxstyle="round,pad=0.01", facecolor=BG_CARD,
-            edgecolor="#1F2937", lw=0.8))
+            boxstyle="round,pad=0.01", facecolor=card_bg,
+            edgecolor=card_edge, lw=1.2))
         cx = x0 + (cw - 2 * pad) / 2
         ax_stats.text(cx, y0 + (ch - 2 * pad) * 0.72, val,
-                      fontsize=16, fontproperties=font, color=col,
+                      fontsize=16, fontproperties=font, color=primary,
                       fontweight="bold", ha="center", va="center")
         ax_stats.text(cx, y0 + (ch - 2 * pad) * 0.30, label,
                       fontsize=7.5, fontproperties=font, color=TEXT_SUB,
                       ha="center", va="center")
 
+    # ── Stats legend key ───────────────────────────────────────────────────────
+    ax_key = fig.add_axes([0.02, 0.37, 0.96, 0.025])
+    ax_key.set_facecolor(BG); ax_key.axis("off")
+    ax_key.set_xlim(0, 1); ax_key.set_ylim(0, 1)
+    KEY = "W Wins  ·  D Draws  ·  L Losses  ·  GF Goals For  ·  GA Goals Against  ·  " \
+          "GD Goal Diff  ·  xG Exp. Goals  ·  xGA Exp. Goals Against  ·  " \
+          "xPts Exp. Points  ·  Pts Points  ·  CS Clean Sheets  ·  Pos Final Position"
+    ax_key.text(0.5, 0.5, KEY, fontsize=6.5, fontproperties=font,
+                color="#4B5563", ha="center", va="center")
+
     # ── Top scorers bar ────────────────────────────────────────────────────────
-    ax_score = fig.add_axes([0.08, 0.10, 0.88, 0.26])
+    ax_score = fig.add_axes([0.08, 0.08, 0.88, 0.27])
     ax_score.set_facecolor(BG)
     for sp in ax_score.spines.values():
         sp.set_edgecolor("#374151")
@@ -130,8 +150,8 @@ def render(
         goals_v = [float(s.get("goals", 0)) for s in scorers]
         xg_v    = [float(s.get("xG", 0)) for s in scorers]
         ys      = np.arange(len(scorers))[::-1]
-        ax_score.barh(ys, goals_v, color=primary,    alpha=0.85, label="Goals",   height=0.5, zorder=3)
-        ax_score.barh(ys, xg_v,   color=TEXT_SUB,   alpha=0.45, label="xG",      height=0.5, zorder=2)
+        ax_score.barh(ys, goals_v, color=primary,  alpha=0.85, label="Goals", height=0.5, zorder=3)
+        ax_score.barh(ys, xg_v,   color=card_edge, alpha=0.60, label="xG",   height=0.5, zorder=2)
         ax_score.set_yticks(ys)
         ax_score.set_yticklabels(names, fontsize=8, color=TEXT_SUB)
         ax_score.tick_params(colors=TEXT_SUB, labelsize=8)

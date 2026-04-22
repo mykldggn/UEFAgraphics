@@ -263,6 +263,17 @@ def get_league_players(league: str, season: int) -> list[dict]:
     return [{"id": p["id"], "name": p["player"], "team": p["team"]} for p in stats]
 
 
+def get_most_played_xi(league: str, season: int, team_name: str) -> list[dict]:
+    """Return the 11 most-played players for a team with position data."""
+    players = get_league_player_stats(league, season)
+    team = [p for p in players if p.get("team") == team_name]
+    team.sort(key=lambda p: p.get("minutes", 0), reverse=True)
+    # Expose position under key "position" for lineup_card
+    for p in team:
+        p["position"] = p.get("pos", "")
+    return team
+
+
 # ── Team data ──────────────────────────────────────────────────────────────────
 
 def get_league_teams(league: str, season: int) -> list[dict]:
@@ -397,24 +408,41 @@ def get_league_leaders(league: str, season: int) -> dict:
     return result
 
 
-def get_team_shots(team_id: str, season: int) -> pd.DataFrame:
+def get_team_shots(team_id: str, season: int, league: str | None = None) -> pd.DataFrame:
+    """Get all shots by players who played for this team, using league player stats."""
     ck = {"team_id": team_id, "season": season}
     cached = cache.json_get("understat_team_shots", ck, ttl_hours=12)
     if cached is not None:
         return pd.DataFrame(cached)
 
-    _get_session().get(f"{API_BASE}/team/{team_id}/{season}", timeout=30)
-    data = _ajax(f"getTeamPlayers/{team_id}/{season}", f"team/{team_id}/{season}")
-    if not data:
+    # Resolve league if not given
+    if not league:
+        for slug in UNDERSTAT_LEAGUES:
+            teams = get_league_teams(slug, season)
+            if any(str(t["id"]) == str(team_id) for t in teams):
+                league = slug
+                break
+
+    if not league:
         return pd.DataFrame()
 
+    # Get all players in this league, filter to this team
+    all_players = get_league_player_stats(league, season)
+    team_info   = next((t for t in get_league_teams(league, season)
+                        if str(t["id"]) == str(team_id)), None)
+    team_name   = team_info["name"] if team_info else ""
+
+    team_players = [p for p in all_players if p.get("team", "") == team_name]
+
     all_shots = []
-    for p in (data or [])[:25]:
+    for p in team_players[:25]:
         try:
             pid    = str(p.get("id"))
             sub_df = get_player_shots(pid)
-            sub_df = sub_df[sub_df["season"] == season]
-            all_shots.append(sub_df)
+            if not sub_df.empty:
+                sub_df = sub_df[sub_df["season"] == season].copy()
+                sub_df["player"] = p.get("player", "")
+                all_shots.append(sub_df)
         except Exception as exc:
             logger.warning(f"shots for player {p.get('id')}: {exc}")
 
@@ -426,38 +454,59 @@ def get_team_shots(team_id: str, season: int) -> pd.DataFrame:
     return df
 
 
-def get_team_xg_history(team_id: str, season: int) -> list[dict]:
+def get_team_xg_history(team_id: str, season: int, league: str | None = None) -> list[dict]:
+    """Build per-match xG history for a team from getLeagueData (getTeamResults is defunct)."""
     ck = {"team_id": team_id, "season": season}
-    cached = cache.json_get("understat_team_xg_history", ck, ttl_hours=12)
+    ttl = 2 if season >= CURRENT_SEASON else 24 * 7
+    cached = cache.json_get("understat_team_xg_history", ck, ttl_hours=ttl)
     if cached is not None:
         return cached
 
-    _get_session().get(f"{API_BASE}/team/{team_id}/{season}", timeout=30)
-    data = _ajax(f"getTeamResults/{team_id}/{season}", f"team/{team_id}/{season}")
-    if not data:
+    # Resolve which league this team is in if not provided
+    if not league:
+        for slug in UNDERSTAT_LEAGUES:
+            teams = get_league_teams(slug, season)
+            if any(str(t["id"]) == str(team_id) for t in teams):
+                league = slug
+                break
+
+    if not league:
         return []
 
-    history      = []
-    cum_xG       = 0.0
-    cum_xGA      = 0.0
-    for i, m in enumerate(data or [], 1):
-        home    = m.get("h", {})
-        away    = m.get("a", {})
-        is_home = str(home.get("id")) == str(team_id)
-        xG      = float(m.get("xG", {}).get("h" if is_home else "a", 0))
-        xGA     = float(m.get("xG", {}).get("a" if is_home else "h", 0))
+    # Pull from getLeagueData — history is already cached by get_league_teams
+    _get_session().get(f"{API_BASE}/league/{league}/{season}", timeout=30)
+    data = _ajax(f"getLeagueData/{league}/{season}", f"league/{league}/{season}")
+    if not data or not isinstance(data, dict):
+        return []
+
+    teams_raw = data.get("teams", {}) or {}
+    team_info = next(
+        (info for tid, info in teams_raw.items() if str(tid) == str(team_id)),
+        None
+    )
+    if not team_info:
+        return []
+
+    raw_history = team_info.get("history", [])
+    history = []
+    cum_xG = cum_xGA = 0.0
+    for i, m in enumerate(raw_history, 1):
+        xG  = float(m.get("xG",  0) or 0)
+        xGA = float(m.get("xGA", 0) or 0)
         cum_xG  += xG
         cum_xGA += xGA
         history.append({
             "match":          i,
-            "date":           m.get("datetime", ""),
-            "opponent":       away.get("title") if is_home else home.get("title"),
+            "date":           m.get("date", ""),
+            "opponent":       "",   # not available in leagueData history
+            "h_a":            m.get("h_a", ""),
+            "result":         m.get("result", ""),
             "xG":             round(xG, 3),
             "xGA":            round(xGA, 3),
             "cumulative_xG":  round(cum_xG, 3),
             "cumulative_xGA": round(cum_xGA, 3),
-            "goals":          int(m.get("goals", {}).get("h" if is_home else "a", 0)),
-            "goals_against":  int(m.get("goals", {}).get("a" if is_home else "h", 0)),
+            "goals":          int(m.get("scored", 0) or 0),
+            "goals_against":  int(m.get("missed",  0) or 0),
         })
 
     cache.json_save("understat_team_xg_history", ck, history)

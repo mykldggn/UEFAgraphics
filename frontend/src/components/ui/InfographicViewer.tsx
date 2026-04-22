@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface Props {
   src: string
@@ -8,6 +8,10 @@ interface Props {
 
 export default function InfographicViewer({ src, alt, className = '' }: Props) {
   const [status, setStatus] = useState<'loading' | 'loaded' | 'error'>('loading')
+
+  useEffect(() => {
+    setStatus('loading')
+  }, [src])
 
   return (
     <div className={`relative ${className}`}>

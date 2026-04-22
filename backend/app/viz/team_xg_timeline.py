@@ -39,15 +39,15 @@ def render(
     fig = plt.figure(figsize=(12, 9), facecolor=BG)
 
     # ── Title ──────────────────────────────────────────────────────────────────
-    fig.text(0.5, 0.97, team_name, fontsize=18, fontproperties=font,
+    fig.text(0.5, 0.975, team_name, fontsize=18, fontproperties=font,
              color=TEXT, ha="center", va="top", fontweight="bold")
-    fig.text(0.5, 0.955, f"{season_label} — xG Timeline",
+    fig.text(0.5, 0.948, f"{season_label}  ·  xG Timeline",
              fontsize=11, fontproperties=font, color=TEXT_SUB, ha="center", va="top")
 
     xs = np.array(matches)
 
     # ── Top panel: cumulative xG vs xGA ────────────────────────────────────────
-    ax_cum = fig.add_axes([0.08, 0.52, 0.88, 0.40])
+    ax_cum = fig.add_axes([0.08, 0.51, 0.88, 0.40])
     ax_cum.set_facecolor(BG)
     for sp in ax_cum.spines.values():
         sp.set_edgecolor("#374151")

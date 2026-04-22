@@ -90,11 +90,11 @@ export default function HomePage() {
             placeholder="Search player name…"
             onSearch={searchPlayers}
             onSelect={player => {
-              const id = (player as { id?: string }).id
+              const id   = (player as { id?: string }).id
+              const name = player.name ?? player.player ?? ''
               if (id) {
-                navigate(`/player/${id}?season=${season}&league=${leagueId}`)
+                navigate(`/player/${id}?season=${season}&league=${leagueId}&name=${encodeURIComponent(name)}`)
               } else {
-                const name = player.name ?? player.player ?? ''
                 navigate(`/player/${encodeURIComponent(name)}?season=${season}&league=${leagueId}&source=fbref`)
               }
             }}

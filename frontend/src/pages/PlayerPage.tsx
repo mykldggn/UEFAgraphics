@@ -28,39 +28,55 @@ export default function PlayerPage() {
   const leagueId           = params.get('league') ?? 'ENG-1'
   const source             = params.get('source') ?? 'understat'
 
-  const [activeTab, setActiveTab] = useState('shotmap')
-  const [season, setSeason]       = useState(Number(params.get('season') ?? 2024))
-  const [position, setPosition]   = useState('FW')
+  const [activeTab, setActiveTab]   = useState('shotmap')
+  const [season, setSeason]         = useState(Number(params.get('season') ?? 2025))
+  const [position, setPosition]     = useState('FW')
+  const [cumulative, setCumulative] = useState(false)
 
   if (!playerId) return null
 
-  // Decode name if source=fbref (stored as URL-encoded name)
-  const playerName = source === 'fbref' ? decodeURIComponent(playerId) : playerId
+  // Prefer name from URL param; fall back to decoded playerId for fbref
+  const playerName = params.get('name')
+    ? decodeURIComponent(params.get('name')!)
+    : source === 'fbref' ? decodeURIComponent(playerId) : playerId
 
   function imgSrc(): string {
     switch (activeTab) {
       case 'shotmap':
-        return infographicsApi.shotmap(playerName, season)
+        return infographicsApi.shotmap(playerId!, cumulative ? undefined : season)
       case 'career-xg':
-        return infographicsApi.careerXg(playerName)
+        return infographicsApi.careerXg(playerId!)
       case 'radar':
         return infographicsApi.radar(playerId!, leagueId, season, position)
       case 'summary':
-        return infographicsApi.summaryCard(playerId!, leagueId, season, position)
+        return infographicsApi.summaryCard(playerId!, leagueId, cumulative ? undefined : season, position)
       default:
         return ''
     }
   }
 
-  const showSeasonSelector = ['shotmap', 'radar', 'summary'].includes(activeTab)
+  const showSeasonSelector   = ['shotmap', 'radar', 'summary'].includes(activeTab) && !cumulative
   const showPositionSelector = ['radar', 'summary'].includes(activeTab)
+  const showCumulative       = ['shotmap', 'summary'].includes(activeTab)
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h1 className="text-xl font-bold">{decodeURIComponent(playerName)}</h1>
-        <div className="flex gap-3 flex-wrap">
+        <h1 className="text-xl font-bold">{playerName}</h1>
+        <div className="flex gap-3 flex-wrap items-center">
+          {showCumulative && (
+            <button
+              onClick={() => setCumulative(c => !c)}
+              className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
+                cumulative
+                  ? 'bg-accent border-accent text-white'
+                  : 'border-border text-sub hover:text-white'
+              }`}
+            >
+              All Seasons
+            </button>
+          )}
           {showSeasonSelector && (
             <Select
               value={season}
@@ -80,7 +96,7 @@ export default function PlayerPage() {
         </div>
       </div>
 
-      <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
+      <TabBar tabs={TABS} active={activeTab} onChange={tab => { setActiveTab(tab); setCumulative(false) }} />
 
       {/* Infographic */}
       <div className="flex justify-center">

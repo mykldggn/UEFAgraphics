@@ -25,11 +25,21 @@ from app.viz import (
     career_xg as career_xg_viz,
     team_xg_timeline,
     team_season_card as team_card_viz,
+    lineup_card as lineup_viz,
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/infographics", tags=["infographics"])
 PNG    = "image/png"
+
+
+def _team_match(a: str, b: str) -> bool:
+    """Fuzzy team name match: strip ' FC'/' AFC' suffixes, then check bidirectionally."""
+    import re
+    def norm(s: str) -> str:
+        return re.sub(r'\s+(f\.?c\.?|a\.?f\.?c\.?)$', '', s.lower().strip())
+    an, bn = norm(a), norm(b)
+    return an in bn or bn in an
 
 
 def _png(data: bytes) -> Response:
@@ -45,8 +55,8 @@ def _season_label(season: int) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/player/{player_id}/shotmap")
-def player_shotmap(player_id: str, season: int = Query(...)):
-    ck = {"type": "shotmap", "player_id": player_id, "season": season}
+def player_shotmap(player_id: str, season: int = Query(None)):
+    ck = {"type": "shotmap", "player_id": player_id, "season": season or "all"}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
@@ -57,8 +67,12 @@ def player_shotmap(player_id: str, season: int = Query(...)):
         logger.error(f"shotmap {player_id}/{season}: {exc}")
         raise HTTPException(503, "Failed to fetch shot data")
 
-    df  = shots[shots["season"] == season] if not shots.empty else shots
-    png = shotmap.render(df, meta.get("name", player_id), _season_label(season))
+    if season is not None and not shots.empty:
+        df = shots[shots["season"] == season]
+    else:
+        df = shots
+    label = _season_label(season) if season else "All Seasons"
+    png = shotmap.render(df, meta.get("name", player_id), label)
     cache.img_save("infographic", ck, png)
     return _png(png)
 
@@ -148,38 +162,59 @@ def player_radar(
 def player_summary_card(
     player_id: str,
     league_id: str = Query(None),
-    season: int    = Query(...),
+    season: int    = Query(None),
     position: str  = Query("FW"),
 ):
     ck = {"type": "summary_card", "player_id": player_id,
-          "league_id": league_id, "season": season}
+          "league_id": league_id, "season": season or "all"}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
-    meta         = understat.get_player_meta(player_id)
-    season_stats = understat.get_player_season_stats(player_id, season)
-    if not season_stats:
-        raise HTTPException(404, f"No stats for player {player_id} in {season}")
+    meta = understat.get_player_meta(player_id)
 
-    # Map Understat season stats → summary_card expected keys
-    stats = {
-        "goals":      season_stats.get("goals"),
-        "assists":    season_stats.get("assists"),
-        "xG":         season_stats.get("xg"),
-        "xA":         season_stats.get("xa"),
-        "npxG":       season_stats.get("npxg"),
-        "minutes":    season_stats.get("minutes"),
-        "apps":       season_stats.get("apps"),
-        "key_passes": season_stats.get("key_passes"),
-    }
+    if season is None:
+        # Career aggregate across all seasons
+        all_seasons = meta.get("season_stats", [])
+        if not all_seasons:
+            raise HTTPException(404, f"No career stats for player {player_id}")
+        def _sum(key):
+            return sum(float(s.get(key) or 0) for s in all_seasons)
+        stats = {
+            "goals":      _sum("goals"),
+            "assists":    _sum("assists"),
+            "xG":         round(_sum("xg"), 2),
+            "xA":         round(_sum("xa"), 2),
+            "npxG":       round(_sum("npxg"), 2),
+            "minutes":    _sum("minutes"),
+            "apps":       _sum("apps"),
+            "key_passes": _sum("key_passes"),
+        }
+        team         = all_seasons[-1].get("team", "")
+        season_label = "Career"
+    else:
+        season_stats = understat.get_player_season_stats(player_id, season)
+        if not season_stats:
+            raise HTTPException(404, f"No stats for player {player_id} in {season}")
+        stats = {
+            "goals":      season_stats.get("goals"),
+            "assists":    season_stats.get("assists"),
+            "xG":         season_stats.get("xg"),
+            "xA":         season_stats.get("xa"),
+            "npxG":       season_stats.get("npxg"),
+            "minutes":    season_stats.get("minutes"),
+            "apps":       season_stats.get("apps"),
+            "key_passes": season_stats.get("key_passes"),
+        }
+        team         = season_stats.get("team", "")
+        season_label = _season_label(season)
 
     png = summary_card.render(
         player_name  = meta.get("name", player_id),
         position     = position,
-        team         = season_stats.get("team", ""),
-        season_label = _season_label(season),
+        team         = team,
+        season_label = season_label,
         stats        = stats,
-        league_label = fdorg.LEAGUE_LABELS.get(league_id, league_id),
+        league_label = fdorg.LEAGUE_LABELS.get(league_id, league_id) if league_id else "",
     )
     cache.img_save("infographic", ck, png)
     return _png(png)
@@ -203,7 +238,7 @@ def team_xg_timeline_img(
         if us_slug:
             us_teams = understat.get_league_teams(us_slug, season)
             us_team  = next(
-                (t for t in us_teams if team_name.lower() in t["name"].lower()), None
+                (t for t in us_teams if _team_match(team_name, t["name"])), None
             )
             if us_team:
                 us_team_id = us_team["id"]
@@ -212,8 +247,9 @@ def team_xg_timeline_img(
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
+    us_slug = understat.LEAGUE_TO_US.get(league_id) if league_id else None
     try:
-        history = understat.get_team_xg_history(us_team_id, season)
+        history = understat.get_team_xg_history(us_team_id, season, league=us_slug)
     except Exception as exc:
         logger.error(f"team xg timeline {us_team_id}/{season}: {exc}")
         raise HTTPException(503, "Failed to fetch team xG history")
@@ -230,14 +266,14 @@ def team_season_card(
     league_id: str = Query(...),
     season: int    = Query(...),
 ):
-    ck = {"type": "team_season_card", "team_id": team_id, "season": season}
+    ck = {"type": "team_season_card", "team_id": team_id, "season": season, "v": 2}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
     # Standings from football-data.org
     table    = fdorg.get_standings(league_id, season)
     team_row = next(
-        (r for r in table if team_name.lower() in r.get("team", "").lower()), None
+        (r for r in table if _team_match(team_name, r.get("team", ""))), None
     )
 
     stats: dict = {}
@@ -253,33 +289,56 @@ def team_season_card(
     top_scorers = fdorg.get_top_scorers(league_id, season, limit=8)
     # Filter to this team
     top_scorers = [s for s in top_scorers
-                   if team_name.lower() in s.get("team", "").lower()]
+                   if _team_match(team_name, s.get("team", ""))]
 
-    # Understat xG stats (best-effort)
+    # Understat enrichment: xG, clean sheets, position history, top scorers
     us_slug = understat.LEAGUE_TO_US.get(league_id)
     if us_slug:
         try:
             us_teams = understat.get_league_teams(us_slug, season)
             us_team  = next(
-                (t for t in us_teams if team_name.lower() in t["name"].lower()), None
+                (t for t in us_teams if _team_match(team_name, t["name"])), None
             )
             if us_team:
-                stats["xG"]  = us_team.get("xG")
-                stats["xGA"] = us_team.get("xGA")
+                stats["xG"]   = us_team.get("xG")
+                stats["xGA"]  = us_team.get("xGA")
                 stats["xPts"] = us_team.get("xPts")
-                # Better top scorers from shot data
-                shots = understat.get_team_shots(us_team["id"], season)
-                if not shots.empty and "player" in shots.columns:
-                    grp = (
-                        shots[shots["result"] == "Goal"]
-                        .groupby("player")
-                        .agg(goals=("result", "count"), xG=("xG", "sum"))
-                        .reset_index()
-                        .nlargest(8, "goals")
-                    )
-                    top_scorers = grp.to_dict(orient="records")
-        except Exception:
-            pass
+
+                # Clean sheets + position history from per-match data
+                xg_hist = understat.get_team_xg_history(us_team["id"], season, league=us_slug)
+                if xg_hist:
+                    stats["clean_sheets"] = sum(1 for m in xg_hist if m.get("goals_against", 1) == 0)
+                    # Build real position history from league position history
+                    pos_history_data = understat.get_league_position_history(us_slug, season)
+                    if pos_history_data:
+                        pos_h = [
+                            {"matchday": row["match"], "position": row.get(us_team["name"])}
+                            for row in pos_history_data.get("history", [])
+                            if row.get(us_team["name"]) is not None
+                        ]
+
+                # Final position from standings
+                sorted_teams = sorted(us_teams, key=lambda t: t.get("pts", 0), reverse=True)
+                final_pos = next(
+                    (i + 1 for i, t in enumerate(sorted_teams)
+                     if _team_match(team_name, t["name"])), None
+                )
+                if final_pos:
+                    stats["final_position"] = final_pos
+
+                # Top scorers from league player stats (already cached, no extra requests)
+                all_players = understat.get_league_player_stats(us_slug, season)
+                team_players = [
+                    p for p in all_players if p.get("team") == us_team["name"]
+                ]
+                if team_players:
+                    top_scorers = sorted(
+                        [{"player": p["player"], "goals": p.get("goals", 0),
+                          "xG": p.get("xg", 0)} for p in team_players],
+                        key=lambda x: x["goals"], reverse=True
+                    )[:8]
+        except Exception as e:
+            logger.warning(f"Understat enrichment failed for {team_name}: {e}")
 
     png = team_card_viz.render(
         team_name      = team_name,
@@ -288,6 +347,43 @@ def team_season_card(
         position_history = pos_h,
         stats          = stats,
         top_scorers    = top_scorers,
+    )
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/team/{team_id}/lineup")
+def team_lineup(
+    team_id:   str,
+    team_name: str = Query(...),
+    league_id: str = Query(...),
+    season:    int = Query(...),
+):
+    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 9}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        raise HTTPException(400, "Lineup only available for Understat leagues")
+
+    # Resolve Understat team name
+    us_teams  = understat.get_league_teams(us_slug, season)
+    us_team   = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
+    us_name   = us_team["name"] if us_team else team_name
+
+    players = understat.get_most_played_xi(us_slug, season, us_name)
+    if not players:
+        raise HTTPException(503, "No player data available")
+
+    manager = fdorg.get_team_coach(team_id)
+
+    png = lineup_viz.render(
+        team_name    = team_name,
+        season_label = _season_label(season),
+        league_label = fdorg.LEAGUE_LABELS.get(league_id, league_id),
+        players      = players,
+        manager      = manager,
     )
     cache.img_save("infographic", ck, png)
     return _png(png)
