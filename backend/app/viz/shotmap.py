@@ -90,12 +90,14 @@ def render(
             zorder=3,
         )
 
-    # Average distance annotation
+    # Average distance annotation — placed on far left to avoid overlapping shots
     ax_pitch.scatter(50, avg_x, s=80, color=TEXT, zorder=5, marker="D")
     ax_pitch.plot([50, 50], [100, avg_x], color=TEXT, lw=1.5, ls="--")
-    ax_pitch.text(52, avg_x - 3,
-                  f"Avg dist\n{avg_dist_yd:.1f} yds",
-                  fontsize=8, color=TEXT, ha="left", fontproperties=font)
+    # Horizontal leader line from diamond to label on the left
+    ax_pitch.plot([15, 50], [avg_x, avg_x], color=TEXT, lw=0.8, ls=":", alpha=0.6)
+    ax_pitch.text(14, avg_x,
+                  f"Avg dist  {avg_dist_yd:.1f} yds",
+                  fontsize=8, color=TEXT, ha="right", va="center", fontproperties=font)
 
     # Stats bar
     ax_stats = fig.add_axes([0, 0.15, 1, 0.06])
