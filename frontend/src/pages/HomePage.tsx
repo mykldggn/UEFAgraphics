@@ -57,6 +57,24 @@ export default function HomePage() {
         position: 'relative',
         overflow: 'hidden',
       }}>
+        {/* UCL logo watermark — centered, very faint */}
+        <img
+          src="/ucl-logo.png"
+          alt=""
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -52%)',
+            width: 500,
+            opacity: 0.055,
+            filter: 'invert(1)',
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}
+        />
+
         {/* Radial gold glow */}
         <div style={{
           position: 'absolute',
@@ -64,14 +82,52 @@ export default function HomePage() {
           left: '50%',
           transform: 'translate(-50%, -60%)',
           width: 600,
-          height: 300,
-          background: 'radial-gradient(ellipse, rgba(201,168,76,0.18) 0%, transparent 70%)',
+          height: 320,
+          background: 'radial-gradient(ellipse, rgba(201,168,76,0.22) 0%, transparent 70%)',
           pointerEvents: 'none',
         }} />
 
+        {/* Trophy — left (mirrored) */}
+        <img
+          src="/ucl-trophy.png"
+          alt=""
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: 'calc(50% - 300px)',
+            top: '50%',
+            transform: 'translateY(-54%) scaleX(-1)',
+            width: 180,
+            opacity: 0.65,
+            maskImage: 'radial-gradient(ellipse 80% 90% at 30% 50%, black 40%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 80% 90% at 30% 50%, black 40%, transparent 100%)',
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}
+        />
+
+        {/* Trophy — right */}
+        <img
+          src="/ucl-trophy.png"
+          alt=""
+          aria-hidden
+          style={{
+            position: 'absolute',
+            right: 'calc(50% - 300px)',
+            top: '50%',
+            transform: 'translateY(-54%)',
+            width: 180,
+            opacity: 0.65,
+            maskImage: 'radial-gradient(ellipse 80% 90% at 70% 50%, black 40%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 80% 90% at 70% 50%, black 40%, transparent 100%)',
+            pointerEvents: 'none',
+            userSelect: 'none',
+          }}
+        />
+
         <h1 style={{
           fontFamily: '"Bebas Neue", sans-serif',
-          fontSize: 72,
+          fontSize: 82,
           letterSpacing: '0.06em',
           lineHeight: 1,
           margin: '0 0 12px',
