@@ -57,7 +57,7 @@ export default function HomePage() {
         position: 'relative',
         overflow: 'hidden',
       }}>
-        {/* UCL logo watermark — centered, very faint */}
+        {/* UCL logo watermark — centered, screen blend so bg doesn't show as white slab */}
         <img
           src="/ucl-logo.png"
           alt=""
@@ -66,10 +66,11 @@ export default function HomePage() {
             position: 'absolute',
             top: '50%',
             left: '50%',
-            transform: 'translate(-50%, -52%)',
-            width: 500,
-            opacity: 0.055,
-            filter: 'invert(1)',
+            transform: 'translate(-50%, -50%)',
+            width: 640,
+            opacity: 0.18,
+            filter: 'invert(1) grayscale(1)',
+            mixBlendMode: 'screen',
             pointerEvents: 'none',
             userSelect: 'none',
           }}
@@ -87,39 +88,41 @@ export default function HomePage() {
           pointerEvents: 'none',
         }} />
 
-        {/* Trophy — left (mirrored) */}
+        {/* Trophy — left (mirrored), pushed wide */}
         <img
           src="/ucl-trophy.png"
           alt=""
           aria-hidden
           style={{
             position: 'absolute',
-            left: 'calc(50% - 300px)',
+            left: 'calc(50% - 460px)',
             top: '50%',
-            transform: 'translateY(-54%) scaleX(-1)',
-            width: 180,
+            transform: 'translateY(-52%) scaleX(-1)',
+            width: 200,
             opacity: 0.65,
-            maskImage: 'radial-gradient(ellipse 80% 90% at 30% 50%, black 40%, transparent 100%)',
-            WebkitMaskImage: 'radial-gradient(ellipse 80% 90% at 30% 50%, black 40%, transparent 100%)',
+            filter: 'grayscale(0.15)',
+            maskImage: 'radial-gradient(ellipse 90% 95% at 20% 50%, black 30%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 90% 95% at 20% 50%, black 30%, transparent 100%)',
             pointerEvents: 'none',
             userSelect: 'none',
           }}
         />
 
-        {/* Trophy — right */}
+        {/* Trophy — right, pushed wide */}
         <img
           src="/ucl-trophy.png"
           alt=""
           aria-hidden
           style={{
             position: 'absolute',
-            right: 'calc(50% - 300px)',
+            right: 'calc(50% - 460px)',
             top: '50%',
-            transform: 'translateY(-54%)',
-            width: 180,
+            transform: 'translateY(-52%)',
+            width: 200,
             opacity: 0.65,
-            maskImage: 'radial-gradient(ellipse 80% 90% at 70% 50%, black 40%, transparent 100%)',
-            WebkitMaskImage: 'radial-gradient(ellipse 80% 90% at 70% 50%, black 40%, transparent 100%)',
+            filter: 'grayscale(0.15)',
+            maskImage: 'radial-gradient(ellipse 90% 95% at 80% 50%, black 30%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 90% 95% at 80% 50%, black 30%, transparent 100%)',
             pointerEvents: 'none',
             userSelect: 'none',
           }}
