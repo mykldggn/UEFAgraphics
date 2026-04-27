@@ -14,18 +14,31 @@ interface Props {
 
 export default function Select({ label, value, options, onChange, disabled, className = '' }: Props) {
   return (
-    <div className={`flex flex-col gap-1 ${className}`}>
-      {label && <label className="text-xs text-sub font-medium uppercase tracking-wide">{label}</label>}
+    <div className={className} style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      {label && (
+        <label style={{ fontSize: 10, color: '#4d5e7a', fontWeight: 500, textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+          {label}
+        </label>
+      )}
       <select
         value={value}
         onChange={e => onChange(e.target.value)}
         disabled={disabled}
-        className="bg-card border border-border text-white text-sm rounded-md px-3 py-2
-                   focus:outline-none focus:ring-1 focus:ring-accent disabled:opacity-50
-                   disabled:cursor-not-allowed appearance-none cursor-pointer"
+        style={{
+          background: '#111b2f',
+          border: '1px solid #1a2235',
+          color: '#e6e9f4',
+          fontSize: 13,
+          borderRadius: 5,
+          padding: '7px 10px',
+          outline: 'none',
+          appearance: 'none',
+          cursor: 'pointer',
+          opacity: disabled ? 0.5 : 1,
+        }}
       >
         {options.map(opt => (
-          <option key={opt.value} value={opt.value}>{opt.label}</option>
+          <option key={opt.value} value={opt.value} style={{ background: '#0c1321' }}>{opt.label}</option>
         ))}
       </select>
     </div>

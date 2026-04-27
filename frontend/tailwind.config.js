@@ -4,18 +4,21 @@ export default {
   theme: {
     extend: {
       colors: {
-        bg:       '#0C0D0E',
-        card:     '#12151C',
-        border:   '#1F2937',
-        text:     '#FFFFFF',
-        sub:      '#9CA3AF',
-        accent:   '#3B82F6',
-        green:    '#22C55E',
-        red:      '#EF4444',
-        amber:    '#F59E0B',
+        bg:       '#06080f',
+        surface:  '#0c1321',
+        surface2: '#111b2f',
+        border:   '#1a2235',
+        accent:   '#c9a84c',
+        blue:     '#4a9eff',
+        text:     '#e6e9f4',
+        muted:    '#4d5e7a',
+        muted2:   '#1e2c44',
+        green:    '#4dc478',
+        red:      '#e63946',
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans:    ['Inter', 'system-ui', 'sans-serif'],
+        display: ['"Bebas Neue"', 'sans-serif'],
       },
       keyframes: {
         pageFadeIn: {

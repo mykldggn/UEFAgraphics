@@ -35,7 +35,6 @@ export default function PlayerPage() {
 
   if (!playerId) return null
 
-  // Prefer name from URL param; fall back to decoded playerId for fbref
   const playerName = params.get('name')
     ? decodeURIComponent(params.get('name')!)
     : source === 'fbref' ? decodeURIComponent(playerId) : playerId
@@ -60,38 +59,52 @@ export default function PlayerPage() {
   const showCumulative       = ['shotmap', 'summary'].includes(activeTab)
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h1 className="text-xl font-bold">{playerName}</h1>
-        <div className="flex gap-3 flex-wrap items-center">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Header strip */}
+      <div style={{
+        background: 'linear-gradient(90deg, rgba(201,168,76,0.10), transparent)',
+        borderLeft: '4px solid #c9a84c',
+        borderRadius: '0 6px 6px 0',
+        padding: '12px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 12,
+      }}>
+        <h1 style={{
+          fontFamily: '"Bebas Neue", sans-serif',
+          fontSize: 28,
+          letterSpacing: '0.04em',
+          color: '#e6e9f4',
+          margin: 0,
+        }}>
+          {playerName}
+        </h1>
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
           {showCumulative && (
             <button
               onClick={() => setCumulative(c => !c)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
-                cumulative
-                  ? 'bg-accent border-accent text-white'
-                  : 'border-border text-sub hover:text-white'
-              }`}
+              style={{
+                padding: '6px 14px',
+                borderRadius: 5,
+                fontSize: 12,
+                fontWeight: 500,
+                border: `1px solid ${cumulative ? '#c9a84c' : '#1a2235'}`,
+                background: cumulative ? 'rgba(201,168,76,0.15)' : 'transparent',
+                color: cumulative ? '#c9a84c' : '#4d5e7a',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+              }}
             >
               All Seasons
             </button>
           )}
           {showSeasonSelector && (
-            <Select
-              value={season}
-              options={SEASON_OPTS}
-              onChange={v => setSeason(Number(v))}
-              className="w-36"
-            />
+            <Select value={season} options={SEASON_OPTS} onChange={v => setSeason(Number(v))} />
           )}
           {showPositionSelector && (
-            <Select
-              value={position}
-              options={POSITION_OPTS}
-              onChange={setPosition}
-              className="w-36"
-            />
+            <Select value={position} options={POSITION_OPTS} onChange={setPosition} />
           )}
         </div>
       </div>
@@ -99,7 +112,7 @@ export default function PlayerPage() {
       <TabBar tabs={TABS} active={activeTab} onChange={tab => { setActiveTab(tab); setCumulative(false) }} />
 
       {/* Infographic */}
-      <div className="flex justify-center">
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
         <InfographicViewer
           src={imgSrc()}
           alt={`${playerName} ${activeTab}`}
@@ -108,11 +121,13 @@ export default function PlayerPage() {
       </div>
 
       {/* Download link */}
-      <div className="text-center">
+      <div style={{ textAlign: 'center' }}>
         <a
           href={imgSrc()}
           download={`${playerName}-${activeTab}-${season}.png`}
-          className="inline-flex items-center gap-2 text-xs text-sub hover:text-accent transition-colors"
+          style={{ fontSize: 12, color: '#4d5e7a', textDecoration: 'none', transition: 'color 0.15s' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#c9a84c')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#4d5e7a')}
         >
           ↓ Download PNG
         </a>

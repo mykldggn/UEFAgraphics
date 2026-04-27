@@ -17,24 +17,41 @@ const PAGE_TABS = [
   { id: 'leaders', label: 'Leaders'       },
 ]
 
-// 20-colour palette for team lines
+// 20-colour palette for team lines — vivid spectrum
 const PALETTE = [
-  '#3B82F6','#EF4444','#22C55E','#F59E0B','#8B5CF6',
+  '#4a9eff','#e63946','#4dc478','#c9a84c','#8B5CF6',
   '#06B6D4','#EC4899','#84CC16','#F97316','#6366F1',
   '#14B8A6','#E11D48','#0EA5E9','#A3E635','#7C3AED',
   '#FB923C','#34D399','#FBBF24','#60A5FA','#F87171',
 ]
 
-const FORM_BG: Record<string, string> = { W: '#22C55E', D: '#F59E0B', L: '#EF4444' }
+const FORM_BG: Record<string, string> = {
+  W: '#1fa355',
+  D: '#9a6e00',
+  L: '#c42b2b',
+}
 
 function FormPills({ form }: { form: string }) {
   const chars = form.replace(/[^WDLwdl]/gi, '').toUpperCase().split('')
-  if (!chars.length) return <span className="text-sub">—</span>
+  if (!chars.length) return <span style={{ color: '#4d5e7a' }}>—</span>
   return (
-    <div className="flex gap-1 justify-end">
+    <div style={{ display: 'flex', gap: 3, justifyContent: 'flex-end' }}>
       {chars.map((r, i) => (
-        <span key={i} style={{ backgroundColor: FORM_BG[r] ?? '#6B7280' }}
-          className="inline-flex items-center justify-center w-4 h-4 rounded-sm text-[9px] font-bold text-white">
+        <span
+          key={i}
+          style={{
+            backgroundColor: FORM_BG[r] ?? '#374151',
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 20,
+            height: 20,
+            borderRadius: 3,
+            fontSize: 9,
+            fontWeight: 700,
+            color: '#fff',
+          }}
+        >
           {r}
         </span>
       ))}
@@ -44,19 +61,48 @@ function FormPills({ form }: { form: string }) {
 
 function LeaderBoard({ title, entries, unit = '' }: { title: string; entries: LeaderEntry[]; unit?: string }) {
   return (
-    <div className="bg-card border border-border rounded-xl p-4 space-y-2">
-      <h3 className="text-sm font-semibold text-sub uppercase tracking-wide">{title}</h3>
-      {entries.slice(0, 10).map((e, i) => (
-        <div key={i} className="flex items-center gap-2 text-sm">
-          <span className="text-sub w-5 text-right">{i + 1}</span>
-          <div className="flex-1 min-w-0">
-            <span className="font-medium">{e.player}</span>
-            <span className="text-sub text-xs ml-1">({e.team})</span>
+    <div style={{
+      background: '#0c1321',
+      border: '1px solid #1a2235',
+      borderRadius: 8,
+      padding: 16,
+      boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+    }}>
+      <h3 style={{
+        fontFamily: '"Bebas Neue", sans-serif',
+        fontSize: 15,
+        letterSpacing: '0.05em',
+        color: '#e6e9f4',
+        margin: '0 0 10px',
+        paddingBottom: 8,
+        borderBottom: '1px solid #1a2235',
+      }}>{title}</h3>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {entries.slice(0, 10).map((e, i) => (
+          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+            <span style={{
+              fontFamily: '"Bebas Neue", sans-serif',
+              fontSize: 13,
+              color: '#1e2c44',
+              width: 18,
+              textAlign: 'right',
+              flexShrink: 0,
+            }}>{i + 1}</span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <span style={{ color: '#e6e9f4', fontWeight: 500 }}>{e.player}</span>
+              <span style={{ color: '#4d5e7a', fontSize: 11, marginLeft: 4 }}>({e.team})</span>
+            </div>
+            <span style={{
+              fontFamily: '"Bebas Neue", sans-serif',
+              fontSize: 17,
+              color: '#c9a84c',
+              fontWeight: 700,
+              flexShrink: 0,
+            }}>{e.value}{unit}</span>
           </div>
-          <span className="font-semibold text-accent tabular-nums">{e.value}{unit}</span>
-        </div>
-      ))}
-      {entries.length === 0 && <p className="text-sub text-xs">No data</p>}
+        ))}
+        {entries.length === 0 && <p style={{ color: '#4d5e7a', fontSize: 12 }}>No data</p>}
+      </div>
     </div>
   )
 }
@@ -98,7 +144,6 @@ export default function LeaguePage() {
 
   if (!leagueId) return null
 
-  // Table columns
   const COLS: { key: string; label: string }[] = [
     { key: 'played',        label: 'MP' },
     { key: 'wins',          label: 'W'  },
@@ -110,7 +155,6 @@ export default function LeaguePage() {
     { key: 'points',        label: 'Pts'},
   ].filter(c => table.length > 0 && table[0][c.key] != null)
 
-  // Position race chart
   const teamColorMap: Record<string, string> = {}
   if (posHistory) {
     posHistory.teams.forEach((t, i) => { teamColorMap[t] = PALETTE[i % PALETTE.length] })
@@ -119,120 +163,189 @@ export default function LeaguePage() {
 
   const leagueName = leagueId.replace('-', ' ')
 
+  // Position zone border colors
+  function posZoneColor(pos: number): string {
+    if (pos <= 4) return '#c9a84c'   // CL — gold
+    if (pos <= 6) return '#4a9eff'   // EL — blue
+    return 'transparent'
+  }
+
   return (
-    <div className="space-y-6">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h1 className="text-xl font-bold">{leagueName}</h1>
-        <Select value={season} options={SEASON_OPTS}
-          onChange={v => setSeason(Number(v))} className="w-36" />
+      <div style={{
+        background: 'linear-gradient(90deg, rgba(201,168,76,0.10), transparent)',
+        borderLeft: '4px solid #c9a84c',
+        borderRadius: '0 6px 6px 0',
+        padding: '12px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 12,
+      }}>
+        <h1 style={{
+          fontFamily: '"Bebas Neue", sans-serif',
+          fontSize: 28,
+          letterSpacing: '0.04em',
+          color: '#e6e9f4',
+          margin: 0,
+          textTransform: 'uppercase',
+        }}>
+          {leagueName}
+        </h1>
+        <Select value={season} options={SEASON_OPTS} onChange={v => setSeason(Number(v))} />
       </div>
 
       <TabBar tabs={PAGE_TABS} active={activeTab} onChange={setActiveTab} />
 
       {loading && (
-        <div className="flex justify-center py-16 text-sub text-sm">Loading…</div>
+        <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0', color: '#4d5e7a', fontSize: 13 }}>
+          Loading…
+        </div>
       )}
       {error && (
-        <div className="bg-red-900/20 border border-red-500/30 text-red-400 rounded-lg px-4 py-3 text-sm">{error}</div>
+        <div style={{
+          background: 'rgba(230,57,70,0.1)',
+          border: '1px solid rgba(230,57,70,0.3)',
+          color: '#e63946',
+          borderRadius: 8,
+          padding: '12px 16px',
+          fontSize: 13,
+        }}>{error}</div>
       )}
 
       {/* ── TABLE ── */}
       {!loading && activeTab === 'table' && (
         table.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm border-collapse">
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
               <thead>
-                <tr className="border-b border-border text-sub text-xs uppercase tracking-wide">
-                  <th className="py-2 px-3 text-left w-6">#</th>
-                  <th className="py-2 px-3 text-left">Team</th>
-                  {COLS.map(c => <th key={c.key} className="py-2 px-3 text-right">{c.label}</th>)}
-                  <th className="py-2 px-3 text-right">Form</th>
+                <tr style={{ borderBottom: '1px solid #1a2235' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', width: 32, fontSize: 10, color: '#4d5e7a', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 500 }}>#</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, color: '#4d5e7a', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 500 }}>Team</th>
+                  {COLS.map(c => (
+                    <th key={c.key} style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, color: '#4d5e7a', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 500 }}>
+                      {c.label}
+                    </th>
+                  ))}
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, color: '#4d5e7a', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 500 }}>Form</th>
                 </tr>
               </thead>
               <tbody>
                 {table.map((row, i) => (
-                  <tr key={i} className="border-b border-border/50 hover:bg-card transition-colors">
-                    <td className="py-2 px-3 text-sub">{i + 1}</td>
-                    <td className="py-2 px-3 font-medium">{row.team}</td>
+                  <tr
+                    key={i}
+                    style={{
+                      borderBottom: '1px solid rgba(26,34,53,0.6)',
+                      borderLeft: `2px solid ${posZoneColor(i + 1)}`,
+                      background: i % 2 === 1 ? 'rgba(201,168,76,0.025)' : 'transparent',
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,168,76,0.05)')}
+                    onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 1 ? 'rgba(201,168,76,0.025)' : 'transparent')}
+                  >
+                    <td style={{ padding: '8px 12px', color: '#4d5e7a', fontFamily: '"Bebas Neue", sans-serif', fontSize: 16, letterSpacing: '0.04em' }}>{i + 1}</td>
+                    <td style={{ padding: '8px 12px', color: '#e6e9f4', fontWeight: 500 }}>{row.team}</td>
                     {COLS.map(c => (
-                      <td key={c.key} className={`py-2 px-3 text-right ${c.key === 'points' ? 'font-semibold text-accent' : 'text-sub'}`}>
+                      <td key={c.key} style={{
+                        padding: '8px 12px',
+                        textAlign: 'right',
+                        color: c.key === 'points' ? '#c9a84c' : '#4d5e7a',
+                        fontFamily: c.key === 'points' ? '"Bebas Neue", sans-serif' : 'Inter, sans-serif',
+                        fontSize: c.key === 'points' ? 16 : 13,
+                        fontWeight: c.key === 'points' ? 700 : 400,
+                        letterSpacing: c.key === 'points' ? '0.04em' : 0,
+                      }}>
                         {row[c.key] != null ? String(row[c.key]) : '—'}
                       </td>
                     ))}
-                    <td className="py-2 px-3"><FormPills form={String(row.form ?? '')} /></td>
+                    <td style={{ padding: '8px 12px' }}><FormPills form={String(row.form ?? '')} /></td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         ) : (
-          !error && <div className="text-center py-16 text-sub text-sm">No table data available.</div>
+          !error && <div style={{ textAlign: 'center', padding: '48px 0', color: '#4d5e7a', fontSize: 13 }}>No table data available.</div>
         )
       )}
 
       {/* ── POSITION RACE ── */}
       {!loading && activeTab === 'race' && (
         posHistory && posHistory.history.length > 0 ? (
-          <div className="space-y-4">
-            <p className="text-xs text-sub">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <p style={{ fontSize: 12, color: '#4d5e7a', margin: 0 }}>
               League position after each match played.
-              {posHistory.history.length < 34
-                ? ' Data reflects the current point in the season.'
-                : ''}
+              {posHistory.history.length < 34 ? ' Data reflects the current point in the season.' : ''}
               {' '}Click a team to highlight.
             </p>
-            <ResponsiveContainer width="100%" height={480}>
-              <LineChart data={posHistory.history} layout="horizontal"
-                margin={{ top: 10, right: 30, bottom: 20, left: 10 }}>
-                <XAxis dataKey="match" type="number"
-                  domain={[1, posHistory.history.length]}
-                  ticks={(() => {
-                    const n = posHistory.history.length
-                    const step = n <= 20 ? 1 : n <= 38 ? 2 : 4
-                    const t: number[] = []
-                    for (let i = 1; i <= n; i += step) t.push(i)
-                    if (t[t.length - 1] !== n) t.push(n)
-                    return t
-                  })()}
-                  tick={{ fill: '#9CA3AF', fontSize: 10 }}
-                  label={{ value: 'Match', position: 'insideBottom', offset: -4, fill: '#9CA3AF', fontSize: 10 }} />
-                <YAxis reversed domain={[1, numTeams]} tickCount={numTeams}
-                  tick={{ fill: '#9CA3AF', fontSize: 10 }}
-                  label={{ value: 'Position', angle: -90, position: 'insideLeft', fill: '#9CA3AF', fontSize: 10 }} />
-                <Tooltip
-                  contentStyle={{ backgroundColor: '#12151C', border: '1px solid #1F2937', borderRadius: 8, fontSize: 11 }}
-                  itemStyle={{ color: '#9CA3AF' }}
-                  formatter={(val, name) => [`${val}`, name]}
-                  itemSorter={item => Number(item.value)}
-                />
-                {[4, 6, 17].map(pos => (
-                  <ReferenceLine key={pos} y={pos} stroke="#1F2937" strokeDasharray="3 3" />
-                ))}
-                {posHistory.teams.map(team => (
-                  <Line key={team} type="linear" dataKey={team}
-                    stroke={teamColorMap[team]}
-                    strokeWidth={focusTeam === null ? 1.5 : focusTeam === team ? 2.5 : 0.5}
-                    opacity={focusTeam === null ? 0.85 : focusTeam === team ? 1 : 0.15}
-                    dot={false} connectNulls activeDot={{ r: 4 }}
-                    isAnimationActive={false}
+            <div style={{
+              background: '#0c1321',
+              border: '1px solid #1a2235',
+              borderRadius: 8,
+              padding: '16px 8px',
+              boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
+            }}>
+              <ResponsiveContainer width="100%" height={480}>
+                <LineChart data={posHistory.history} layout="horizontal"
+                  margin={{ top: 10, right: 30, bottom: 20, left: 10 }}>
+                  <XAxis dataKey="match" type="number"
+                    domain={[1, posHistory.history.length]}
+                    ticks={(() => {
+                      const n = posHistory.history.length
+                      const step = n <= 20 ? 1 : n <= 38 ? 2 : 4
+                      const t: number[] = []
+                      for (let i = 1; i <= n; i += step) t.push(i)
+                      if (t[t.length - 1] !== n) t.push(n)
+                      return t
+                    })()}
+                    tick={{ fill: '#4d5e7a', fontSize: 10 }}
+                    label={{ value: 'Match', position: 'insideBottom', offset: -4, fill: '#4d5e7a', fontSize: 10 }} />
+                  <YAxis reversed domain={[1, numTeams]} tickCount={numTeams}
+                    tick={{ fill: '#4d5e7a', fontSize: 10 }}
+                    label={{ value: 'Position', angle: -90, position: 'insideLeft', fill: '#4d5e7a', fontSize: 10 }} />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#0c1321', border: '1px solid #1a2235', borderRadius: 8, fontSize: 11 }}
+                    itemStyle={{ color: '#4d5e7a' }}
+                    formatter={(val, name) => [`${val}`, name]}
+                    itemSorter={item => Number(item.value)}
                   />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
+                  {[4, 6, 17].map(pos => (
+                    <ReferenceLine key={pos} y={pos} stroke="#1a2235" strokeDasharray="3 3" />
+                  ))}
+                  {posHistory.teams.map(team => (
+                    <Line key={team} type="linear" dataKey={team}
+                      stroke={teamColorMap[team]}
+                      strokeWidth={focusTeam === null ? 1.5 : focusTeam === team ? 2.5 : 0.5}
+                      opacity={focusTeam === null ? 0.85 : focusTeam === team ? 1 : 0.15}
+                      dot={false} connectNulls activeDot={{ r: 4 }}
+                      isAnimationActive={false}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
             {/* Team legend */}
-            <div className="flex flex-wrap gap-2 justify-center">
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center' }}>
               {posHistory.teams.map(team => (
                 <button key={team}
                   onClick={() => setFocusTeam(f => f === team ? null : team)}
-                  className="flex items-center gap-1.5 text-xs px-2 py-1 rounded-md border transition-colors"
                   style={{
-                    borderColor: teamColorMap[team],
-                    backgroundColor: focusTeam === team ? teamColorMap[team] + '33' : 'transparent',
-                    color: focusTeam === null || focusTeam === team ? '#fff' : '#6B7280',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    fontSize: 11,
+                    padding: '4px 10px',
+                    borderRadius: 4,
+                    border: `1px solid ${teamColorMap[team]}`,
+                    background: focusTeam === team ? teamColorMap[team] + '33' : 'transparent',
+                    color: focusTeam === null || focusTeam === team ? '#e6e9f4' : '#4d5e7a',
+                    cursor: 'pointer',
+                    transition: 'all 0.15s',
                   }}
                 >
-                  <span className="w-2 h-2 rounded-full" style={{ backgroundColor: teamColorMap[team] }} />
+                  <span style={{ width: 8, height: 8, borderRadius: '50%', background: teamColorMap[team], flexShrink: 0 }} />
                   {team}
                 </button>
               ))}
@@ -240,9 +353,9 @@ export default function LeaguePage() {
           </div>
         ) : (
           !error && (
-            <div className="text-center py-16 space-y-2">
-              <p className="text-sub text-sm">Position history is only available for Understat leagues.</p>
-              <p className="text-sub/60 text-xs">Supported: Premier League · La Liga · Bundesliga · Serie A · Ligue 1</p>
+            <div style={{ textAlign: 'center', padding: '48px 0' }}>
+              <p style={{ color: '#4d5e7a', fontSize: 13, marginBottom: 6 }}>Position history is only available for Understat leagues.</p>
+              <p style={{ color: '#1e2c44', fontSize: 11 }}>Supported: Premier League · La Liga · Bundesliga · Serie A · Ligue 1</p>
             </div>
           )
         )
@@ -251,7 +364,7 @@ export default function LeaguePage() {
       {/* ── LEADERS ── */}
       {!loading && activeTab === 'leaders' && (
         leaders ? (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
             <LeaderBoard title="Top Scorers"    entries={leaders.goals ?? []} />
             <LeaderBoard title="Top Assisters"  entries={leaders.assists ?? []} />
             <LeaderBoard title="xG Leaders"     entries={leaders.xg ?? []} />
@@ -259,7 +372,7 @@ export default function LeaguePage() {
             <LeaderBoard title="Most Shots"     entries={leaders.shots ?? []} />
           </div>
         ) : (
-          !error && <div className="text-center py-16 text-sub text-sm">Leaders not available for this league.</div>
+          !error && <div style={{ textAlign: 'center', padding: '48px 0', color: '#4d5e7a', fontSize: 13 }}>Leaders not available for this league.</div>
         )
       )}
     </div>

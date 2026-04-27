@@ -4,14 +4,21 @@ import Navbar from './Navbar'
 export default function AppLayout() {
   const location = useLocation()
   return (
-    <div className="min-h-screen bg-bg text-white flex flex-col">
+    <div style={{ minHeight: '100vh', background: '#06080f', color: '#e6e9f4', display: 'flex', flexDirection: 'column' }}>
       <Navbar />
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 py-6">
+      <main style={{ flex: 1, maxWidth: 1152, width: '100%', margin: '0 auto', padding: '24px 16px' }}>
         <div key={location.pathname} className="animate-page-enter">
           <Outlet />
         </div>
       </main>
-      <footer className="border-t border-border text-sub text-xs text-center py-4">
+      <footer style={{
+        borderTop: '1px solid #1a2235',
+        color: '#4d5e7a',
+        fontSize: 11,
+        textAlign: 'center',
+        padding: '14px 16px',
+        fontFamily: 'Inter, sans-serif',
+      }}>
         UEFAgraphics · Data: FBref / Understat · Built by mykldggn
       </footer>
     </div>

@@ -11,16 +11,28 @@ interface Props {
 
 export default function TabBar({ tabs, active, onChange }: Props) {
   return (
-    <div className="flex gap-1 border-b border-border pb-0 mb-6 overflow-x-auto">
+    <div style={{ display: 'flex', borderBottom: '1px solid #1a2235', marginBottom: 24, overflowX: 'auto' }}>
       {tabs.map(tab => (
         <button
           key={tab.id}
           onClick={() => onChange(tab.id)}
-          className={`px-4 py-2 text-sm font-medium whitespace-nowrap transition-colors border-b-2 -mb-px ${
-            active === tab.id
-              ? 'text-accent border-accent'
-              : 'text-sub border-transparent hover:text-white'
-          }`}
+          style={{
+            padding: '9px 18px',
+            marginBottom: -1,
+            fontSize: 13,
+            fontWeight: active === tab.id ? 600 : 400,
+            color: active === tab.id ? '#c9a84c' : '#4d5e7a',
+            borderBottom: active === tab.id ? '2px solid #c9a84c' : '2px solid transparent',
+            background: 'none',
+            border: 'none',
+            borderBottomWidth: 2,
+            borderBottomStyle: 'solid',
+            borderBottomColor: active === tab.id ? '#c9a84c' : 'transparent',
+            cursor: 'pointer',
+            whiteSpace: 'nowrap',
+            transition: 'all 0.15s',
+            outline: 'none',
+          }}
         >
           {tab.label}
         </button>

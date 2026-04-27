@@ -39,20 +39,34 @@ export default function TeamPage() {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h1 className="text-xl font-bold">{teamName}</h1>
-        <Select
-          value={season}
-          options={SEASON_OPTS}
-          onChange={v => setSeason(Number(v))}
-          className="w-36"
-        />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+      {/* Header strip */}
+      <div style={{
+        background: 'linear-gradient(90deg, rgba(201,168,76,0.10), transparent)',
+        borderLeft: '4px solid #c9a84c',
+        borderRadius: '0 6px 6px 0',
+        padding: '12px 16px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: 12,
+      }}>
+        <h1 style={{
+          fontFamily: '"Bebas Neue", sans-serif',
+          fontSize: 28,
+          letterSpacing: '0.04em',
+          color: '#e6e9f4',
+          margin: 0,
+        }}>
+          {teamName}
+        </h1>
+        <Select value={season} options={SEASON_OPTS} onChange={v => setSeason(Number(v))} />
       </div>
 
       <TabBar tabs={TABS} active={activeTab} onChange={setActiveTab} />
 
-      <div className="flex justify-center">
+      <div style={{ display: 'flex', justifyContent: 'center' }}>
         <InfographicViewer
           src={imgSrc()}
           alt={`${teamName} ${activeTab}`}
@@ -60,11 +74,13 @@ export default function TeamPage() {
         />
       </div>
 
-      <div className="text-center">
+      <div style={{ textAlign: 'center' }}>
         <a
           href={imgSrc()}
           download={`${teamName}-${activeTab}-${season}.png`}
-          className="inline-flex items-center gap-2 text-xs text-sub hover:text-accent transition-colors"
+          style={{ fontSize: 12, color: '#4d5e7a', textDecoration: 'none', transition: 'color 0.15s' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#c9a84c')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#4d5e7a')}
         >
           ↓ Download PNG
         </a>

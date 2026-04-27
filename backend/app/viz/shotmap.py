@@ -90,16 +90,24 @@ def render(
             zorder=3,
         )
 
-    # Average distance annotation — placed on far left to avoid overlapping shots
+    # Average distance — dashed line at centre + label anchored in bottom-left corner
+    # (Y≈3–16, X≈50–60 is almost always empty: wide angle, far out, rarely a shot)
     ax_pitch.scatter(50, avg_x, s=80, color=TEXT, zorder=5, marker="D")
     ax_pitch.plot([50, 50], [100, avg_x], color=TEXT, lw=1.5, ls="--")
-    # Horizontal leader line from diamond to label on the left
-    ax_pitch.plot([15, 50], [avg_x, avg_x], color=TEXT, lw=0.8, ls=":", alpha=0.6)
-    ax_pitch.text(14, avg_x,
-                  f"Avg dist  {avg_dist_yd:.1f} yds",
-                  fontsize=8, color=TEXT, ha="right", va="center", fontproperties=font)
 
-    # Stats bar
+    # Corner annotation box — bottom-left of pitch (near halfway line, wide left)
+    ax_pitch.text(
+        4, 56,
+        f"Avg dist\n{avg_dist_yd:.1f} yds",
+        fontsize=8, color=TEXT, ha="left", va="center",
+        fontproperties=font, zorder=6,
+        bbox=dict(boxstyle="round,pad=0.4", facecolor=BG,
+                  edgecolor="#4B5563", alpha=0.88, linewidth=0.7),
+    )
+    # Subtle dotted leader line from annotation to the dashed centre line
+    ax_pitch.plot([17, 49], [56, avg_x], color=TEXT, lw=0.6, ls=":", alpha=0.35)
+
+    # Stats bar (4 stats, no avg dist — that lives on the pitch)
     ax_stats = fig.add_axes([0, 0.15, 1, 0.06])
     ax_stats.set_facecolor(BG); ax_stats.set_xlim(0, 1); ax_stats.set_ylim(0, 1)
     ax_stats.axis("off")

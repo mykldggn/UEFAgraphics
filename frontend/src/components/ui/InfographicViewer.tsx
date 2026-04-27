@@ -16,20 +16,28 @@ export default function InfographicViewer({ src, alt, className = '' }: Props) {
   return (
     <div className={`relative ${className}`}>
       {status === 'loading' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-card rounded-lg">
-          <div className="flex flex-col items-center gap-3 text-sub">
-            <svg className="w-8 h-8 animate-spin text-accent" viewBox="0 0 24 24" fill="none">
-              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-              <path className="opacity-75" fill="currentColor"
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: '#0c1321', borderRadius: 8, minHeight: 300,
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: '#4d5e7a' }}>
+            <svg style={{ width: 32, height: 32, color: '#c9a84c' }} className="animate-spin" viewBox="0 0 24 24" fill="none">
+              <circle style={{ opacity: 0.25 }} cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path style={{ opacity: 0.75 }} fill="currentColor"
                 d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
             </svg>
-            <span className="text-sm">Generating infographic…</span>
+            <span style={{ fontSize: 13 }}>Generating infographic…</span>
           </div>
         </div>
       )}
 
       {status === 'error' && (
-        <div className="flex items-center justify-center bg-card rounded-lg p-12 text-sub text-sm">
+        <div style={{
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: '#0c1321', borderRadius: 8, padding: 48, minHeight: 200,
+          color: '#4d5e7a', fontSize: 13, border: '1px solid #1a2235',
+        }}>
           Failed to load infographic. The data may not be available for this selection.
         </div>
       )}
@@ -37,9 +45,12 @@ export default function InfographicViewer({ src, alt, className = '' }: Props) {
       <img
         src={src}
         alt={alt}
-        className={`w-full rounded-lg transition-opacity duration-300 ${
-          status === 'loaded' ? 'opacity-100' : 'opacity-0'
-        }`}
+        style={{
+          width: '100%',
+          borderRadius: 8,
+          transition: 'opacity 0.3s',
+          opacity: status === 'loaded' ? 1 : 0,
+        }}
         onLoad={() => setStatus('loaded')}
         onError={() => setStatus('error')}
       />
