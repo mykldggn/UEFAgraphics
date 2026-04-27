@@ -48,14 +48,13 @@ export default function HomePage() {
   const teamOpts   = teams.map(t => ({ value: t.id, label: t.name }))
 
   return (
-    <div style={{ maxWidth: 760, margin: '0 auto' }}>
+    <div>
 
-      {/* Hero */}
+      {/* Hero — full AppLayout width, no overflow clip so trophies show */}
       <div style={{
         textAlign: 'center',
         padding: '48px 16px 40px',
         position: 'relative',
-        overflow: 'hidden',
       }}>
         {/* UCL logo watermark — centered, screen blend so bg doesn't show as white slab */}
         <img
@@ -67,8 +66,8 @@ export default function HomePage() {
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)',
-            width: 640,
-            opacity: 0.18,
+            width: 420,
+            opacity: 0.16,
             filter: 'invert(1) grayscale(1)',
             mixBlendMode: 'screen',
             pointerEvents: 'none',
@@ -88,41 +87,41 @@ export default function HomePage() {
           pointerEvents: 'none',
         }} />
 
-        {/* Trophy — left (mirrored), pushed wide */}
+        {/* Trophy — left (mirrored) */}
         <img
           src="/ucl-trophy.png"
           alt=""
           aria-hidden
           style={{
             position: 'absolute',
-            left: 'calc(50% - 460px)',
+            left: 'calc(50% - 400px)',
             top: '50%',
             transform: 'translateY(-52%) scaleX(-1)',
-            width: 200,
+            width: 180,
             opacity: 0.65,
-            filter: 'grayscale(0.15)',
-            maskImage: 'radial-gradient(ellipse 90% 95% at 20% 50%, black 30%, transparent 100%)',
-            WebkitMaskImage: 'radial-gradient(ellipse 90% 95% at 20% 50%, black 30%, transparent 100%)',
+            filter: 'grayscale(0.1)',
+            maskImage: 'radial-gradient(ellipse 90% 95% at 15% 50%, black 30%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 90% 95% at 15% 50%, black 30%, transparent 100%)',
             pointerEvents: 'none',
             userSelect: 'none',
           }}
         />
 
-        {/* Trophy — right, pushed wide */}
+        {/* Trophy — right */}
         <img
           src="/ucl-trophy.png"
           alt=""
           aria-hidden
           style={{
             position: 'absolute',
-            right: 'calc(50% - 460px)',
+            right: 'calc(50% - 400px)',
             top: '50%',
             transform: 'translateY(-52%)',
-            width: 200,
+            width: 180,
             opacity: 0.65,
-            filter: 'grayscale(0.15)',
-            maskImage: 'radial-gradient(ellipse 90% 95% at 80% 50%, black 30%, transparent 100%)',
-            WebkitMaskImage: 'radial-gradient(ellipse 90% 95% at 80% 50%, black 30%, transparent 100%)',
+            filter: 'grayscale(0.1)',
+            maskImage: 'radial-gradient(ellipse 90% 95% at 85% 50%, black 30%, transparent 100%)',
+            WebkitMaskImage: 'radial-gradient(ellipse 90% 95% at 85% 50%, black 30%, transparent 100%)',
             pointerEvents: 'none',
             userSelect: 'none',
           }}
@@ -188,6 +187,9 @@ export default function HomePage() {
           marginTop: 40,
         }} />
       </div>
+
+      {/* Search panel + features — constrained to 720px */}
+      <div style={{ maxWidth: 720, margin: '0 auto' }}>
 
       {/* Search panel */}
       <div style={{ marginBottom: 40 }}>
@@ -350,6 +352,8 @@ export default function HomePage() {
           </div>
         ))}
       </div>
+
+      </div> {/* end narrow wrapper */}
     </div>
   )
 }
