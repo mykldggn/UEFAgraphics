@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import Select from '../components/ui/Select'
 import SearchInput from '../components/ui/SearchInput'
@@ -9,13 +9,94 @@ const SEASON_OPTS  = SEASONS.map(s => ({ value: s, label: `${s}/${String(s + 1).
 const SEARCH_TABS  = ['Player', 'Team', 'League'] as const
 type SearchTab = typeof SEARCH_TABS[number]
 
-const FEATURES = [
-  { icon: '◎', title: 'Shot Maps',    desc: 'xG-weighted shots, distance & goal distribution' },
-  { icon: '◈', title: 'Radars',       desc: 'Per-90 percentile pizza charts vs peers' },
-  { icon: '↗', title: 'Career xG',   desc: 'Cumulative xG vs goals across seasons' },
-  { icon: '▦', title: 'Summary Cards', desc: 'Season stats at a glance with progress bars' },
-  { icon: '⚡', title: 'xG Timeline', desc: 'Match-by-match xG for & against' },
-  { icon: '🏆', title: 'League Tables', desc: 'Standings, form, position race & leaderboards' },
+const _s = { width: 22, height: 22, display: 'block' as const }
+
+const FEATURES: { icon: React.ReactNode; title: string; desc: string }[] = [
+  {
+    icon: (
+      <svg style={_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <circle cx="12" cy="12" r="9"/>
+        <circle cx="12" cy="12" r="5"/>
+        <circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/>
+        <line x1="12" y1="2" x2="12" y2="4"/>
+        <line x1="12" y1="20" x2="12" y2="22"/>
+        <line x1="2" y1="12" x2="4" y2="12"/>
+        <line x1="20" y1="12" x2="22" y2="12"/>
+      </svg>
+    ),
+    title: 'Shot Maps',
+    desc: 'xG-weighted shots, distance & goal distribution',
+  },
+  {
+    icon: (
+      <svg style={_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <polygon points="12,2 20.5,7 20.5,17 12,22 3.5,17 3.5,7"/>
+        <line x1="12" y1="2" x2="12" y2="12" strokeWidth="0.8"/>
+        <line x1="20.5" y1="7" x2="12" y2="12" strokeWidth="0.8"/>
+        <line x1="20.5" y1="17" x2="12" y2="12" strokeWidth="0.8"/>
+        <line x1="12" y1="22" x2="12" y2="12" strokeWidth="0.8"/>
+        <line x1="3.5" y1="17" x2="12" y2="12" strokeWidth="0.8"/>
+        <line x1="3.5" y1="7" x2="12" y2="12" strokeWidth="0.8"/>
+        <polygon points="12,6 16.5,8.5 16.5,15.5 12,18 7.5,15.5 7.5,8.5" strokeWidth="0.8"/>
+      </svg>
+    ),
+    title: 'Radars',
+    desc: 'Per-90 percentile pizza charts vs peers',
+  },
+  {
+    icon: (
+      <svg style={_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <line x1="2" y1="20" x2="2" y2="4" strokeWidth="1"/>
+        <line x1="2" y1="20" x2="22" y2="20" strokeWidth="1"/>
+        <polyline points="2,20 5,17 9,14 13,9 17,7 22,4" strokeWidth="1.5"/>
+        <circle cx="5" cy="17" r="1.5" fill="currentColor" stroke="none"/>
+        <circle cx="9" cy="14" r="1.5" fill="currentColor" stroke="none"/>
+        <circle cx="13" cy="9" r="1.5" fill="currentColor" stroke="none"/>
+        <circle cx="17" cy="7" r="1.5" fill="currentColor" stroke="none"/>
+      </svg>
+    ),
+    title: 'Career xG',
+    desc: 'Cumulative xG vs goals across seasons',
+  },
+  {
+    icon: (
+      <svg style={_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="3" y="5" width="13" height="2.5" rx="1.2" fill="currentColor" stroke="none"/>
+        <rect x="3" y="11" width="9" height="2.5" rx="1.2" fill="currentColor" stroke="none" opacity="0.75"/>
+        <rect x="3" y="17" width="16" height="2.5" rx="1.2" fill="currentColor" stroke="none" opacity="0.5"/>
+      </svg>
+    ),
+    title: 'Summary Cards',
+    desc: 'Season stats at a glance with progress bars',
+  },
+  {
+    icon: (
+      <svg style={_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <line x1="2" y1="19" x2="22" y2="19" strokeWidth="1"/>
+        <circle cx="4" cy="19" r="1.5" fill="currentColor" stroke="none"/>
+        <circle cx="9" cy="19" r="1.5" fill="currentColor" stroke="none"/>
+        <circle cx="14" cy="19" r="1.5" fill="currentColor" stroke="none"/>
+        <circle cx="19" cy="19" r="1.5" fill="currentColor" stroke="none"/>
+        <polyline points="4,19 4,13 9,15 9,10 14,13 14,7 19,19" strokeWidth="1.5"/>
+      </svg>
+    ),
+    title: 'xG Timeline',
+    desc: 'Match-by-match xG for & against',
+  },
+  {
+    icon: (
+      <svg style={_s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+        <rect x="1.5" y="13" width="5" height="8" rx="1"/>
+        <rect x="9.5" y="8" width="5" height="13" rx="1"/>
+        <rect x="17.5" y="10.5" width="5" height="10.5" rx="1"/>
+        <circle cx="4" cy="9.5" r="2.2"/>
+        <circle cx="12" cy="4.5" r="2.2"/>
+        <circle cx="20" cy="7" r="2.2"/>
+      </svg>
+    ),
+    title: 'League Tables',
+    desc: 'Standings, form, position race & leaderboards',
+  },
 ]
 
 export default function HomePage() {
@@ -363,7 +444,7 @@ export default function HomePage() {
               ;(e.currentTarget as HTMLElement).style.boxShadow = '0 2px 12px rgba(0,0,0,0.4)'
             }}
           >
-            <div style={{ fontSize: 20, marginBottom: 6, color: '#c9a84c' }}>{icon}</div>
+            <div style={{ marginBottom: 8, color: '#c9a84c' }}>{icon}</div>
             <div style={{
               fontFamily: '"Bebas Neue", sans-serif',
               fontSize: 16,
