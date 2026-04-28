@@ -90,32 +90,20 @@ def render(
             zorder=3,
         )
 
-    # Average distance — dashed line at centre + label anchored in bottom-left corner
-    # (Y≈3–16, X≈50–60 is almost always empty: wide angle, far out, rarely a shot)
+    # Average distance — dashed line + diamond marker on pitch centre line only
     ax_pitch.scatter(50, avg_x, s=80, color=TEXT, zorder=5, marker="D")
     ax_pitch.plot([50, 50], [100, avg_x], color=TEXT, lw=1.5, ls="--")
 
-    # Corner annotation box — bottom-left of pitch (near halfway line, wide left)
-    ax_pitch.text(
-        4, 56,
-        f"Avg dist\n{avg_dist_yd:.1f} yds",
-        fontsize=8, color=TEXT, ha="left", va="center",
-        fontproperties=font, zorder=6,
-        bbox=dict(boxstyle="round,pad=0.4", facecolor=BG,
-                  edgecolor="#4B5563", alpha=0.88, linewidth=0.7),
-    )
-    # Subtle dotted leader line from annotation to the dashed centre line
-    ax_pitch.plot([17, 49], [56, avg_x], color=TEXT, lw=0.6, ls=":", alpha=0.35)
-
-    # Stats bar (4 stats, no avg dist — that lives on the pitch)
+    # Stats bar (5 stats including avg distance)
     ax_stats = fig.add_axes([0, 0.15, 1, 0.06])
     ax_stats.set_facecolor(BG); ax_stats.set_xlim(0, 1); ax_stats.set_ylim(0, 1)
     ax_stats.axis("off")
     for xp, lbl, val in [
-        (0.10, "Shots",    str(total_shots)),
-        (0.33, "Goals",    str(total_goals)),
-        (0.57, "xG",       f"{total_xG:.2f}"),
-        (0.79, "xG/Shot",  f"{xg_per_shot:.2f}"),
+        (0.08, "Shots",    str(total_shots)),
+        (0.27, "Goals",    str(total_goals)),
+        (0.47, "xG",       f"{total_xG:.2f}"),
+        (0.67, "xG/Shot",  f"{xg_per_shot:.2f}"),
+        (0.87, "Avg Dist", f"{avg_dist_yd:.1f} yds"),
     ]:
         ax_stats.text(xp, 0.75, lbl, fontsize=10, color=TEXT_SUB, ha="center",
                       fontproperties=font)
