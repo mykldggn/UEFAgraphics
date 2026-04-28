@@ -1,15 +1,17 @@
 import { useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 
 const LINKS = [
-  { to: '/',       label: 'Home' },
-  { to: '/player', label: 'Players' },
-  { to: '/team',   label: 'Teams' },
-  { to: '/league', label: 'Leagues' },
+  { to: '/',            label: 'Home',    tab: ''       },
+  { to: '/?tab=Player', label: 'Players', tab: 'Player' },
+  { to: '/?tab=Team',   label: 'Teams',   tab: 'Team'   },
+  { to: '/?tab=League', label: 'Leagues', tab: 'League' },
 ]
 
 export default function Navbar() {
   const { pathname } = useLocation()
+  const [searchParams] = useSearchParams()
+  const currentTab = searchParams.get('tab') ?? ''
   const [open, setOpen] = useState(false)
 
   return (
@@ -52,8 +54,8 @@ export default function Navbar() {
 
         {/* Desktop nav */}
         <nav style={{ display: 'flex', alignItems: 'center', gap: 4 }} className="hidden sm:flex">
-          {LINKS.map(({ to, label }) => {
-            const active = pathname === to || (to !== '/' && pathname.startsWith(to))
+          {LINKS.map(({ to, label, tab }) => {
+            const active = pathname === '/' && currentTab === tab
             return (
               <Link
                 key={to}
@@ -104,8 +106,8 @@ export default function Navbar() {
       {/* Mobile dropdown */}
       {open && (
         <nav style={{ background: '#0c1321', borderTop: '1px solid #1a2235', padding: '8px 16px 12px' }}>
-          {LINKS.map(({ to, label }) => {
-            const active = pathname === to || (to !== '/' && pathname.startsWith(to))
+          {LINKS.map(({ to, label, tab }) => {
+            const active = pathname === '/' && currentTab === tab
             return (
               <Link
                 key={to}

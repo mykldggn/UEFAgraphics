@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import Select from '../components/ui/Select'
 import SearchInput from '../components/ui/SearchInput'
 import { leaguesApi, type League, type Team } from '../api/leagues'
@@ -20,12 +20,19 @@ const FEATURES = [
 
 export default function HomePage() {
   const navigate = useNavigate()
-  const [tab, setTab]             = useState<SearchTab>('Player')
+  const [searchParams] = useSearchParams()
+  const initialTab = (searchParams.get('tab') as SearchTab | null) ?? 'Player'
+  const [tab, setTab]             = useState<SearchTab>(SEARCH_TABS.includes(initialTab as SearchTab) ? initialTab : 'Player')
   const [leagues, setLeagues]     = useState<League[]>([])
   const [leagueId, setLeagueId]   = useState('ENG-1')
   const [season, setSeason]       = useState(CURRENT_SEASON)
   const [teams, setTeams]         = useState<Team[]>([])
   const [selectedTeam, setSelectedTeam] = useState<Team | null>(null)
+
+  useEffect(() => {
+    const t = searchParams.get('tab') as SearchTab | null
+    if (t && SEARCH_TABS.includes(t)) setTab(t)
+  }, [searchParams])
 
   useEffect(() => {
     leaguesApi.list().then(setLeagues).catch(() => {})
@@ -146,7 +153,7 @@ export default function HomePage() {
 
         <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
           <button
-            onClick={() => navigate('/player')}
+            onClick={() => navigate('/?tab=Player')}
             style={{
               background: '#c9a84c',
               color: '#06080f',
@@ -163,7 +170,7 @@ export default function HomePage() {
             Explore Players
           </button>
           <button
-            onClick={() => navigate('/team')}
+            onClick={() => navigate('/?tab=Team')}
             style={{
               background: 'transparent',
               color: '#4d5e7a',
@@ -177,6 +184,22 @@ export default function HomePage() {
             }}
           >
             Browse Teams
+          </button>
+          <button
+            onClick={() => navigate('/?tab=League')}
+            style={{
+              background: 'transparent',
+              color: '#4d5e7a',
+              border: '1px solid #1a2235',
+              borderRadius: 5,
+              padding: '9px 20px',
+              fontSize: 13,
+              fontWeight: 500,
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+            }}
+          >
+            Leagues
           </button>
         </div>
 

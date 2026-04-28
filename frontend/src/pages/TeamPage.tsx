@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, useSearchParams } from 'react-router-dom'
 import TabBar from '../components/ui/TabBar'
 import InfographicViewer from '../components/ui/InfographicViewer'
 import Select from '../components/ui/Select'
 import { infographicsApi } from '../api/infographics'
+import { leaguesApi } from '../api/leagues'
 import { SEASONS } from '../utils/constants'
 
 const SEASON_OPTS = SEASONS.map(s => ({ value: s, label: `${s}/${String(s + 1).slice(-2)}` }))
@@ -14,6 +15,13 @@ const TABS = [
   { id: 'lineup',      label: 'Most Played XI' },
 ]
 
+interface TeamMeta {
+  crest: string | null
+  venue: string | null
+  founded: number | null
+  address: string | null
+}
+
 export default function TeamPage() {
   const { teamId }   = useParams<{ teamId: string }>()
   const [params]     = useSearchParams()
@@ -21,7 +29,15 @@ export default function TeamPage() {
   const leagueId     = params.get('league') ?? 'ENG-1'
 
   const [activeTab, setActiveTab] = useState('xg-timeline')
-  const [season, setSeason]       = useState(Number(params.get('season') ?? 2025))
+  const [season, setSeason]       = useState(Number(params.get('season') ?? 2024))
+  const [meta, setMeta]           = useState<TeamMeta | null>(null)
+
+  useEffect(() => {
+    if (!teamName || !leagueId) return
+    leaguesApi.teamMeta(leagueId, teamName, season)
+      .then(setMeta)
+      .catch(() => setMeta(null))
+  }, [teamName, leagueId, season])
 
   if (!teamId) return null
 
@@ -38,6 +54,11 @@ export default function TeamPage() {
     }
   }
 
+  // Parse city from address (format: "Street, City, Country")
+  const city = meta?.address
+    ? meta.address.split(',').slice(-2, -1)[0]?.trim()
+    : null
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
       {/* Header strip */}
@@ -52,15 +73,44 @@ export default function TeamPage() {
         flexWrap: 'wrap',
         gap: 12,
       }}>
-        <h1 style={{
-          fontFamily: '"Bebas Neue", sans-serif',
-          fontSize: 28,
-          letterSpacing: '0.04em',
-          color: '#e6e9f4',
-          margin: 0,
-        }}>
-          {teamName}
-        </h1>
+        {/* Left: name + metadata */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14, minWidth: 0 }}>
+          {meta?.crest && (
+            <img
+              src={meta.crest}
+              alt={teamName}
+              style={{ width: 48, height: 48, objectFit: 'contain', flexShrink: 0 }}
+              onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }}
+            />
+          )}
+          <div>
+            <h1 style={{
+              fontFamily: '"Bebas Neue", sans-serif',
+              fontSize: 28,
+              letterSpacing: '0.04em',
+              color: '#e6e9f4',
+              margin: 0,
+              lineHeight: 1,
+            }}>
+              {teamName}
+            </h1>
+            {(city || meta?.venue || meta?.founded) && (
+              <div style={{ display: 'flex', gap: 12, marginTop: 4, flexWrap: 'wrap' }}>
+                {city && (
+                  <span style={{ fontSize: 11, color: '#4d5e7a' }}>📍 {city}</span>
+                )}
+                {meta?.venue && (
+                  <span style={{ fontSize: 11, color: '#4d5e7a' }}>🏟 {meta.venue}</span>
+                )}
+                {meta?.founded && (
+                  <span style={{ fontSize: 11, color: '#4d5e7a' }}>Est. {meta.founded}</span>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Right: season selector */}
         <Select value={season} options={SEASON_OPTS} onChange={v => setSeason(Number(v))} />
       </div>
 

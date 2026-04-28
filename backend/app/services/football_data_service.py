@@ -153,7 +153,16 @@ def get_teams(league_id: str, season: int) -> list[dict]:
         return []
 
     teams = [
-        {"id": str(t.get("id", "")), "name": t.get("name", "")}
+        {
+            "id":       str(t.get("id", "")),
+            "name":     t.get("name", ""),
+            "short":    t.get("shortName", ""),
+            "tla":      t.get("tla", ""),
+            "crest":    t.get("crest", ""),
+            "venue":    t.get("venue", ""),
+            "founded":  t.get("founded"),
+            "address":  t.get("address", ""),
+        }
         for t in data.get("teams", [])
     ]
     cache.json_save("fdorg_teams", ck, teams)

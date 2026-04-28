@@ -61,6 +61,11 @@ export const leaguesApi = {
 
   teamXgHistory: (teamId: string, season: number) =>
     request<{ history: unknown[] }>(`/leagues/understat/team/${teamId}/xg-history`, { season }),
+
+  teamMeta: (leagueId: string, teamName: string, season: number) =>
+    request<{ crest: string | null; venue: string | null; founded: number | null; address: string | null }>(
+      `/leagues/${leagueId}/team-meta`, { team_name: teamName, season }
+    ),
 }
 
 export interface LeaderEntry {

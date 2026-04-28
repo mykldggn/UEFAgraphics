@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import {
   LineChart, Line, XAxis, YAxis, Tooltip,
   ResponsiveContainer, ReferenceLine,
@@ -59,13 +59,28 @@ function FormPills({ form }: { form: string }) {
   )
 }
 
-function LeaderBoard({ title, entries, unit = '' }: { title: string; entries: LeaderEntry[]; unit?: string }) {
+// Zone key definitions
+const ZONE_KEY = [
+  { color: '#c9a84c', label: 'Champions League' },
+  { color: '#4a9eff', label: 'Europa League' },
+  { color: '#4dc478', label: 'Conference League' },
+  { color: '#e63946', label: 'Relegation' },
+]
+
+function LeaderBoard({
+  title, entries, unit = '', onPlayerClick,
+}: {
+  title: string
+  entries: LeaderEntry[]
+  unit?: string
+  onPlayerClick?: (player: string, team: string) => void
+}) {
   return (
     <div style={{
       background: '#0c1321',
       border: '1px solid #1a2235',
       borderRadius: 8,
-      padding: 16,
+      padding: '14px 16px',
       boxShadow: '0 2px 12px rgba(0,0,0,0.4)',
     }}>
       <h3 style={{
@@ -77,24 +92,39 @@ function LeaderBoard({ title, entries, unit = '' }: { title: string; entries: Le
         paddingBottom: 8,
         borderBottom: '1px solid #1a2235',
       }}>{title}</h3>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
         {entries.slice(0, 10).map((e, i) => (
-          <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+          <div
+            key={i}
+            onClick={() => onPlayerClick?.(e.player, e.team)}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+              fontSize: 12,
+              padding: '4px 6px',
+              borderRadius: 4,
+              cursor: onPlayerClick ? 'pointer' : 'default',
+              transition: 'background 0.1s',
+            }}
+            onMouseEnter={e2 => { if (onPlayerClick) (e2.currentTarget as HTMLElement).style.background = 'rgba(201,168,76,0.07)' }}
+            onMouseLeave={e2 => { if (onPlayerClick) (e2.currentTarget as HTMLElement).style.background = 'transparent' }}
+          >
             <span style={{
               fontFamily: '"Bebas Neue", sans-serif',
               fontSize: 13,
-              color: '#1e2c44',
+              color: i === 0 ? '#c9a84c' : '#1e2c44',
               width: 18,
               textAlign: 'right',
               flexShrink: 0,
             }}>{i + 1}</span>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <span style={{ color: '#e6e9f4', fontWeight: 500 }}>{e.player}</span>
-              <span style={{ color: '#4d5e7a', fontSize: 11, marginLeft: 4 }}>({e.team})</span>
+              <span style={{ color: '#e6e9f4', fontWeight: 500, display: 'block', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.player}</span>
+              <span style={{ color: '#4d5e7a', fontSize: 10 }}>{e.team}</span>
             </div>
             <span style={{
               fontFamily: '"Bebas Neue", sans-serif',
-              fontSize: 17,
+              fontSize: 18,
               color: '#c9a84c',
               fontWeight: 700,
               flexShrink: 0,
@@ -110,6 +140,7 @@ function LeaderBoard({ title, entries, unit = '' }: { title: string; entries: Le
 export default function LeaguePage() {
   const { leagueId } = useParams<{ leagueId: string }>()
   const [params]     = useSearchParams()
+  const navigate     = useNavigate()
 
   const [activeTab, setActiveTab] = useState('table')
   const [season, setSeason]       = useState(Number(params.get('season') ?? CURRENT_SEASON))
@@ -162,12 +193,32 @@ export default function LeaguePage() {
   const numTeams = posHistory?.teams.length ?? 20
 
   const leagueName = leagueId.replace('-', ' ')
+  const numInLeague = table.length || 20
 
-  // Position zone border colors
+  // Position zone border colors — supports 18, 20-team leagues
   function posZoneColor(pos: number): string {
-    if (pos <= 4) return '#c9a84c'   // CL — gold
-    if (pos <= 6) return '#4a9eff'   // EL — blue
+    if (pos === 1) return '#c9a84c'          // Champion — gold
+    if (pos <= 4) return '#4a9eff'           // CL — blue (top 4)
+    if (pos <= 6) return '#06B6D4'           // EL
+    if (pos <= 7) return '#4dc478'           // Conference League
+    if (pos > numInLeague - 3) return '#e63946' // Relegation (bottom 3)
     return 'transparent'
+  }
+
+  // Row suffix badges: champion crown, relegated R
+  function rowBadge(pos: number): string | null {
+    if (pos === 1 && table[0]?.played != null && Number(table[0].played) >= 34) return '👑'
+    if (pos > numInLeague - 3 && table[0]?.played != null && Number(table[0].played) >= 34) return 'R'
+    return null
+  }
+
+  function handleTeamClick(teamName: string) {
+    // Navigate to team infographics — we need a team ID; use understat team name as ID fallback
+    navigate(`/team/${encodeURIComponent(teamName)}?name=${encodeURIComponent(teamName)}&league=${leagueId}&season=${season}`)
+  }
+
+  function handlePlayerClick(player: string, _team: string) {
+    navigate(`/player/${encodeURIComponent(player)}?season=${season}&league=${leagueId}&source=fbref`)
   }
 
   return (
@@ -218,53 +269,82 @@ export default function LeaguePage() {
       {/* ── TABLE ── */}
       {!loading && activeTab === 'table' && (
         table.length > 0 ? (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
-              <thead>
-                <tr style={{ borderBottom: '1px solid #1a2235' }}>
-                  <th style={{ padding: '8px 12px', textAlign: 'left', width: 32, fontSize: 10, color: '#4d5e7a', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 500 }}>#</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, color: '#4d5e7a', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 500 }}>Team</th>
-                  {COLS.map(c => (
-                    <th key={c.key} style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, color: '#4d5e7a', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 500 }}>
-                      {c.label}
-                    </th>
-                  ))}
-                  <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, color: '#4d5e7a', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 500 }}>Form</th>
-                </tr>
-              </thead>
-              <tbody>
-                {table.map((row, i) => (
-                  <tr
-                    key={i}
-                    style={{
-                      borderBottom: '1px solid rgba(26,34,53,0.6)',
-                      borderLeft: `2px solid ${posZoneColor(i + 1)}`,
-                      background: i % 2 === 1 ? 'rgba(201,168,76,0.025)' : 'transparent',
-                      transition: 'background 0.1s',
-                    }}
-                    onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,168,76,0.05)')}
-                    onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 1 ? 'rgba(201,168,76,0.025)' : 'transparent')}
-                  >
-                    <td style={{ padding: '8px 12px', color: '#4d5e7a', fontFamily: '"Bebas Neue", sans-serif', fontSize: 16, letterSpacing: '0.04em' }}>{i + 1}</td>
-                    <td style={{ padding: '8px 12px', color: '#e6e9f4', fontWeight: 500 }}>{row.team}</td>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+            {/* Zone key */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, paddingLeft: 4 }}>
+              {ZONE_KEY.map(z => (
+                <div key={z.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#4d5e7a' }}>
+                  <span style={{ width: 10, height: 10, borderRadius: 2, background: z.color, flexShrink: 0 }} />
+                  {z.label}
+                </div>
+              ))}
+            </div>
+
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #1a2235' }}>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', width: 32, fontSize: 10, color: '#4d5e7a', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 500 }}>#</th>
+                    <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: 10, color: '#4d5e7a', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 500 }}>Team</th>
                     {COLS.map(c => (
-                      <td key={c.key} style={{
-                        padding: '8px 12px',
-                        textAlign: 'right',
-                        color: c.key === 'points' ? '#c9a84c' : '#4d5e7a',
-                        fontFamily: c.key === 'points' ? '"Bebas Neue", sans-serif' : 'Inter, sans-serif',
-                        fontSize: c.key === 'points' ? 16 : 13,
-                        fontWeight: c.key === 'points' ? 700 : 400,
-                        letterSpacing: c.key === 'points' ? '0.04em' : 0,
-                      }}>
-                        {row[c.key] != null ? String(row[c.key]) : '—'}
-                      </td>
+                      <th key={c.key} style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, color: '#4d5e7a', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 500 }}>
+                        {c.label}
+                      </th>
                     ))}
-                    <td style={{ padding: '8px 12px' }}><FormPills form={String(row.form ?? '')} /></td>
+                    <th style={{ padding: '8px 12px', textAlign: 'right', fontSize: 10, color: '#4d5e7a', textTransform: 'uppercase', letterSpacing: '0.07em', fontWeight: 500 }}>Form</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {table.map((row, i) => {
+                    const badge = rowBadge(i + 1)
+                    return (
+                      <tr
+                        key={i}
+                        onClick={() => handleTeamClick(String(row.team))}
+                        style={{
+                          borderBottom: '1px solid rgba(26,34,53,0.6)',
+                          borderLeft: `3px solid ${posZoneColor(i + 1)}`,
+                          background: i % 2 === 1 ? 'rgba(201,168,76,0.025)' : 'transparent',
+                          transition: 'background 0.1s',
+                          cursor: 'pointer',
+                        }}
+                        onMouseEnter={e => (e.currentTarget.style.background = 'rgba(201,168,76,0.07)')}
+                        onMouseLeave={e => (e.currentTarget.style.background = i % 2 === 1 ? 'rgba(201,168,76,0.025)' : 'transparent')}
+                      >
+                        <td style={{ padding: '8px 12px', color: '#4d5e7a', fontFamily: '"Bebas Neue", sans-serif', fontSize: 16, letterSpacing: '0.04em' }}>{i + 1}</td>
+                        <td style={{ padding: '8px 12px', color: '#e6e9f4', fontWeight: 500 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            {badge && (
+                              <span style={{
+                                fontSize: badge === '👑' ? 12 : 9,
+                                fontWeight: 700,
+                                color: badge === '👑' ? '#c9a84c' : '#e63946',
+                                letterSpacing: 0,
+                              }}>{badge}</span>
+                            )}
+                            {row.team}
+                          </span>
+                        </td>
+                        {COLS.map(c => (
+                          <td key={c.key} style={{
+                            padding: '8px 12px',
+                            textAlign: 'right',
+                            color: c.key === 'points' ? '#c9a84c' : '#4d5e7a',
+                            fontFamily: c.key === 'points' ? '"Bebas Neue", sans-serif' : 'Inter, sans-serif',
+                            fontSize: c.key === 'points' ? 16 : 13,
+                            fontWeight: c.key === 'points' ? 700 : 400,
+                            letterSpacing: c.key === 'points' ? '0.04em' : 0,
+                          }}>
+                            {row[c.key] != null ? String(row[c.key]) : '—'}
+                          </td>
+                        ))}
+                        <td style={{ padding: '8px 12px' }}><FormPills form={String(row.form ?? '')} /></td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         ) : (
           !error && <div style={{ textAlign: 'center', padding: '48px 0', color: '#4d5e7a', fontSize: 13 }}>No table data available.</div>
@@ -364,12 +444,12 @@ export default function LeaguePage() {
       {/* ── LEADERS ── */}
       {!loading && activeTab === 'leaders' && (
         leaders ? (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
-            <LeaderBoard title="Top Scorers"    entries={leaders.goals ?? []} />
-            <LeaderBoard title="Top Assisters"  entries={leaders.assists ?? []} />
-            <LeaderBoard title="xG Leaders"     entries={leaders.xg ?? []} />
-            <LeaderBoard title="Key Passes"     entries={leaders.key_passes ?? []} />
-            <LeaderBoard title="Most Shots"     entries={leaders.shots ?? []} />
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
+            <LeaderBoard title="Top Scorers"   entries={leaders.goals ?? []}      onPlayerClick={handlePlayerClick} />
+            <LeaderBoard title="Top Assisters" entries={leaders.assists ?? []}    onPlayerClick={handlePlayerClick} />
+            <LeaderBoard title="xG Leaders"    entries={leaders.xg ?? []}         onPlayerClick={handlePlayerClick} />
+            <LeaderBoard title="Key Passes"    entries={leaders.key_passes ?? []} onPlayerClick={handlePlayerClick} />
+            <LeaderBoard title="Most Shots"    entries={leaders.shots ?? []}      onPlayerClick={handlePlayerClick} />
           </div>
         ) : (
           !error && <div style={{ textAlign: 'center', padding: '48px 0', color: '#4d5e7a', fontSize: 13 }}>Leaders not available for this league.</div>

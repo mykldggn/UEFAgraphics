@@ -134,6 +134,27 @@ def league_leaders(league_id: str, season: int = Query(...)):
     return {"league": league_id, "season": season, **result}
 
 
+@router.get("/{league_id}/team-meta")
+def get_team_meta(league_id: str, team_name: str = Query(...), season: int = Query(default=2024)):
+    """Return crest, venue, founded for a named team within a league."""
+    teams = fdorg.get_teams(league_id, season)
+    name_lower = team_name.lower()
+    match = next(
+        (t for t in teams if t["name"].lower() == name_lower
+         or t.get("short", "").lower() == name_lower
+         or name_lower in t["name"].lower()),
+        None,
+    )
+    if not match:
+        return {"crest": None, "venue": None, "founded": None, "address": None}
+    return {
+        "crest":   match.get("crest"),
+        "venue":   match.get("venue"),
+        "founded": match.get("founded"),
+        "address": match.get("address"),
+    }
+
+
 @router.get("/understat/team/{team_id}/xg-history")
 def team_xg_history(team_id: str, season: int = Query(...)):
     history = understat.get_team_xg_history(team_id, season)
