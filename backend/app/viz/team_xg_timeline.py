@@ -35,6 +35,12 @@ def render(
     cum_xga       = [h["cumulative_xGA"] for h in history]
     goals         = [h["goals"] for h in history]
     goals_against = [h["goals_against"] for h in history]
+    results       = [str(h.get("result", "")).lower() for h in history]
+    h_a           = [str(h.get("h_a", "")).upper() for h in history]
+
+    # Per-match bar color by result
+    _bar_color = {"w": "#22C55E", "d": "#F59E0B", "l": "#EF4444"}
+    bar_colors = [_bar_color.get(r, GREEN) for r in results]
 
     fig = plt.figure(figsize=(12, 9), facecolor=BG)
 
@@ -81,31 +87,42 @@ def render(
         sp.set_edgecolor("#374151")
 
     bar_w = 0.38
-    ax_bar.bar(xs - bar_w / 2, xg_per,  width=bar_w, color=GREEN, alpha=0.85,
-               label="xG For",    zorder=3)
-    ax_bar.bar(xs + bar_w / 2, xga_per, width=bar_w, color=RED,   alpha=0.85,
+    # Color each xG For bar by match result (W=green, D=amber, L=red)
+    for i, (xi, xg_v, col) in enumerate(zip(xs, xg_per, bar_colors)):
+        ax_bar.bar(xi - bar_w / 2, xg_v, width=bar_w, color=col, alpha=0.85, zorder=3,
+                   label="xG For" if i == 0 else "")
+    ax_bar.bar(xs + bar_w / 2, xga_per, width=bar_w, color="#6B7280", alpha=0.60,
                label="xG Against", zorder=3)
 
     # Actual goal annotations on top of bars
     for i, (g, ga) in enumerate(zip(goals, goals_against)):
         ax_bar.text(xs[i] - bar_w / 2, xg_per[i] + 0.04, str(g),
-                    ha="center", fontsize=6, color=TEXT_SUB, fontproperties=font)
+                    ha="center", fontsize=6, color=TEXT, fontproperties=font, fontweight="bold")
         ax_bar.text(xs[i] + bar_w / 2, xga_per[i] + 0.04, str(ga),
                     ha="center", fontsize=6, color=TEXT_SUB, fontproperties=font)
 
-    # Opponent labels — every match when ≤20 games, every 2nd when ≤38, every 3rd otherwise
-    opponents = [h.get("opponent", "") or "" for h in history]
+    # X-axis: show H/A every match; limit to every 2nd on long seasons
     n = len(matches)
-    step = 1 if n <= 20 else 2 if n <= 38 else 3
+    step = 1 if n <= 20 else 2
     tick_idx = list(range(0, n, step))
     ax_bar.set_xticks([xs[i] for i in tick_idx])
     ax_bar.set_xticklabels(
-        [opponents[i][:5] if i < len(opponents) else "" for i in tick_idx],
-        fontsize=6, color=TEXT_SUB, rotation=50, ha="right"
+        [h_a[i] if i < len(h_a) else "" for i in tick_idx],
+        fontsize=7, color=TEXT_SUB,
     )
-    ax_bar.tick_params(colors=TEXT_SUB, labelsize=8)
+    ax_bar.tick_params(colors=TEXT_SUB, labelsize=8, length=0)
     ax_bar.set_ylabel("Per Match", color=TEXT_SUB, fontsize=9, fontproperties=font)
-    ax_bar.legend(frameon=False, labelcolor=TEXT, prop=font, fontsize=8)
+
+    # Custom legend: W/D/L result colors + xGA
+    from matplotlib.patches import Patch
+    legend_els = [
+        Patch(facecolor="#22C55E", alpha=0.85, label="W · xG For"),
+        Patch(facecolor="#F59E0B", alpha=0.85, label="D · xG For"),
+        Patch(facecolor="#EF4444", alpha=0.85, label="L · xG For"),
+        Patch(facecolor="#6B7280", alpha=0.60, label="xG Against"),
+    ]
+    ax_bar.legend(handles=legend_els, frameon=False, labelcolor=TEXT, prop=font,
+                  fontsize=7, ncol=4, loc="upper right")
     ax_bar.grid(axis="y", color="#1F2937", lw=0.6)
     ax_bar.set_xlim(0.5, max(matches) + 0.5)
 

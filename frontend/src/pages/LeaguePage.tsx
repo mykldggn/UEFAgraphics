@@ -9,6 +9,7 @@ import TabBar from '../components/ui/TabBar'
 import { leaguesApi, type TableRow, type LeaderEntry } from '../api/leagues'
 import { SEASONS, CURRENT_SEASON } from '../utils/constants'
 
+
 const SEASON_OPTS = SEASONS.map(s => ({ value: s, label: `${s}/${String(s + 1).slice(-2)}` }))
 
 const PAGE_TABS = [
@@ -258,7 +259,7 @@ export default function LeaguePage() {
 
       <TabBar tabs={PAGE_TABS} active={activeTab} onChange={setActiveTab} />
 
-      {loading && (
+{loading && (
         <div style={{ display: 'flex', justifyContent: 'center', padding: '48px 0', color: '#4d5e7a', fontSize: 13 }}>
           Loading…
         </div>

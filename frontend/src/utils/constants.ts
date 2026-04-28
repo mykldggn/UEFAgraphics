@@ -11,7 +11,8 @@ export const UNDERSTAT_LEAGUES = [
   { id: 'RFPL',       label: 'Russian Premier League' },
 ]
 
-export const SEASONS = [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015]
+// Understat coverage starts 2014/15 season
+export const SEASONS = [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015, 2014]
 
 export type InfographicType =
   | 'shotmap'
