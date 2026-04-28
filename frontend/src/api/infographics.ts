@@ -1,4 +1,4 @@
-import { imgUrl } from './client'
+import request, { imgUrl } from './client'
 
 export const infographicsApi = {
   // Player (Understat)
@@ -33,4 +33,17 @@ export const infographicsApi = {
 
   teamLineup: (teamId: string, teamName: string, leagueId: string, season: number) =>
     imgUrl(`/infographics/team/${teamId}/lineup`, { team_name: teamName, league_id: leagueId, season }),
+
+  teamLineupPlayers: (teamId: string, teamName: string, leagueId: string, season: number) =>
+    request<{ players: LineupPlayer[]; formation: string }>(
+      `/infographics/team/${teamId}/lineup-players`,
+      { team_name: teamName, league_id: leagueId, season }
+    ),
+}
+
+export interface LineupPlayer {
+  player: string
+  position: string
+  minutes: number
+  id?: string
 }

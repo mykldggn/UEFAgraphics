@@ -93,13 +93,15 @@ def render(
         ax_bar.text(xs[i] + bar_w / 2, xga_per[i] + 0.04, str(ga),
                     ha="center", fontsize=6, color=TEXT_SUB, fontproperties=font)
 
-    # Opponent labels (every 5 matches)
+    # Opponent labels — every match when ≤20 games, every 2nd when ≤38, every 3rd otherwise
     opponents = [h.get("opponent", "") or "" for h in history]
-    step = max(1, len(matches) // 10)
-    ax_bar.set_xticks(xs[::step])
+    n = len(matches)
+    step = 1 if n <= 20 else 2 if n <= 38 else 3
+    tick_idx = list(range(0, n, step))
+    ax_bar.set_xticks([xs[i] for i in tick_idx])
     ax_bar.set_xticklabels(
-        [opponents[i][:8] if i < len(opponents) else "" for i in range(0, len(xs), step)],
-        fontsize=7, color=TEXT_SUB, rotation=30, ha="right"
+        [opponents[i][:5] if i < len(opponents) else "" for i in tick_idx],
+        fontsize=6, color=TEXT_SUB, rotation=50, ha="right"
     )
     ax_bar.tick_params(colors=TEXT_SUB, labelsize=8)
     ax_bar.set_ylabel("Per Match", color=TEXT_SUB, fontsize=9, fontproperties=font)

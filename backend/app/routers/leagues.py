@@ -155,6 +155,22 @@ def get_team_meta(league_id: str, team_name: str = Query(...), season: int = Que
     }
 
 
+@router.get("/{league_id}/team-colors")
+def get_team_colors(league_id: str, season: int = Query(default=2024)):
+    """Return {teamName: hexColor} for a league's teams."""
+    from app.viz.common import TEAM_COLORS, ACCENT
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    teams: list[str] = []
+    if us_slug:
+        us_teams = understat.get_league_teams(us_slug, season)
+        teams = [t["name"] for t in us_teams]
+    else:
+        fdorg_teams = fdorg.get_teams(league_id, season)
+        teams = [t["name"] for t in fdorg_teams]
+    colors = {t: TEAM_COLORS.get(t, ACCENT) for t in teams}
+    return colors
+
+
 @router.get("/understat/team/{team_id}/xg-history")
 def team_xg_history(team_id: str, season: int = Query(...)):
     history = understat.get_team_xg_history(team_id, season)

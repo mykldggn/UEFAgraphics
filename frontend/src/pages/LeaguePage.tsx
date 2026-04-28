@@ -150,6 +150,7 @@ export default function LeaguePage() {
   const [loading, setLoading]     = useState(false)
   const [error, setError]         = useState<string | null>(null)
   const [focusTeam, setFocusTeam] = useState<string | null>(null)
+  const [teamColors, setTeamColors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (!leagueId) return
@@ -168,7 +169,11 @@ export default function LeaguePage() {
       .then(r => setLeaders(r as unknown as Record<string, LeaderEntry[]>))
       .catch(() => {})
 
-    Promise.all([tableP, posP, leadP])
+    const colorP = leaguesApi.teamColors(leagueId, season)
+      .then(r => setTeamColors(r))
+      .catch(() => {})
+
+    Promise.all([tableP, posP, leadP, colorP])
       .catch(e => setError(String(e)))
       .finally(() => setLoading(false))
   }, [leagueId, season])
@@ -188,7 +193,10 @@ export default function LeaguePage() {
 
   const teamColorMap: Record<string, string> = {}
   if (posHistory) {
-    posHistory.teams.forEach((t, i) => { teamColorMap[t] = PALETTE[i % PALETTE.length] })
+    posHistory.teams.forEach((t, i) => {
+      // Use real team color if available, fall back to palette
+      teamColorMap[t] = teamColors[t] || PALETTE[i % PALETTE.length]
+    })
   }
   const numTeams = posHistory?.teams.length ?? 20
 

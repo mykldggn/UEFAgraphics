@@ -189,7 +189,12 @@ def player_summary_card(
             "apps":       _sum("apps"),
             "key_passes": _sum("key_passes"),
         }
-        team         = all_seasons[-1].get("team", "")
+        # Use team player spent the most seasons (by apps) with
+        from collections import Counter
+        team_apps: Counter = Counter()
+        for s in all_seasons:
+            team_apps[s.get("team", "")] += int(s.get("apps", 0) or 0)
+        team = team_apps.most_common(1)[0][0] if team_apps else all_seasons[-1].get("team", "")
         season_label = "Career"
     else:
         season_stats = understat.get_player_season_stats(player_id, season)
@@ -350,6 +355,43 @@ def team_season_card(
     )
     cache.img_save("infographic", ck, png)
     return _png(png)
+
+
+@router.get("/team/{team_id}/lineup-players")
+def team_lineup_players(
+    team_id:   str,
+    team_name: str = Query(...),
+    league_id: str = Query(...),
+    season:    int = Query(...),
+):
+    """Return XI player list as JSON (for clickable overlays)."""
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        return {"players": [], "formation": ""}
+
+    us_teams  = understat.get_league_teams(us_slug, season)
+    us_team   = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
+    us_name   = us_team["name"] if us_team else team_name
+
+    players = understat.get_most_played_xi(us_slug, season, us_name)
+    if not players:
+        return {"players": [], "formation": ""}
+
+    xi, formation = lineup_viz.build_xi(players)
+    # Enrich with Understat player IDs for navigation
+    player_pool = understat.get_league_player_stats(us_slug, season)
+    id_map = {p["player"]: p["id"] for p in player_pool}
+
+    result = []
+    for p in xi:
+        name = p["player"]
+        result.append({
+            "player":   name,
+            "position": p["position"],
+            "minutes":  p["minutes"],
+            "id":       id_map.get(name),
+        })
+    return {"players": result, "formation": formation}
 
 
 @router.get("/team/{team_id}/lineup")

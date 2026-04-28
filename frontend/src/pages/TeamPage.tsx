@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import TabBar from '../components/ui/TabBar'
 import InfographicViewer from '../components/ui/InfographicViewer'
 import Select from '../components/ui/Select'
-import { infographicsApi } from '../api/infographics'
+import { infographicsApi, type LineupPlayer } from '../api/infographics'
 import { leaguesApi } from '../api/leagues'
 import { SEASONS } from '../utils/constants'
 
@@ -28,9 +28,12 @@ export default function TeamPage() {
   const teamName     = params.get('name') ?? teamId ?? ''
   const leagueId     = params.get('league') ?? 'ENG-1'
 
-  const [activeTab, setActiveTab] = useState('xg-timeline')
-  const [season, setSeason]       = useState(Number(params.get('season') ?? 2024))
-  const [meta, setMeta]           = useState<TeamMeta | null>(null)
+  const navigate = useNavigate()
+
+  const [activeTab, setActiveTab]     = useState('xg-timeline')
+  const [season, setSeason]           = useState(Number(params.get('season') ?? 2024))
+  const [meta, setMeta]               = useState<TeamMeta | null>(null)
+  const [lineupPlayers, setLineupPlayers] = useState<LineupPlayer[]>([])
 
   useEffect(() => {
     if (!teamName || !leagueId) return
@@ -38,6 +41,13 @@ export default function TeamPage() {
       .then(setMeta)
       .catch(() => setMeta(null))
   }, [teamName, leagueId, season])
+
+  useEffect(() => {
+    if (activeTab !== 'lineup' || !teamId || !teamName || !leagueId) return
+    infographicsApi.teamLineupPlayers(teamId, teamName, leagueId, season)
+      .then(r => setLineupPlayers(r.players))
+      .catch(() => setLineupPlayers([]))
+  }, [activeTab, teamId, teamName, leagueId, season])
 
   if (!teamId) return null
 
@@ -123,6 +133,37 @@ export default function TeamPage() {
           className="max-w-3xl w-full"
         />
       </div>
+
+      {/* T2: Clickable XI roster chips below lineup image */}
+      {activeTab === 'lineup' && lineupPlayers.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, justifyContent: 'center', maxWidth: 640, margin: '0 auto' }}>
+          {lineupPlayers.map((p, i) => (
+            <button
+              key={i}
+              onClick={() => {
+                if (p.id) {
+                  navigate(`/player/${p.id}?season=${season}&league=${leagueId}&name=${encodeURIComponent(p.player)}`)
+                }
+              }}
+              style={{
+                padding: '5px 12px',
+                borderRadius: 20,
+                fontSize: 12,
+                fontWeight: 500,
+                border: '1px solid #1a2235',
+                background: 'transparent',
+                color: p.id ? '#e6e9f4' : '#4d5e7a',
+                cursor: p.id ? 'pointer' : 'default',
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={e => { if (p.id) (e.currentTarget as HTMLElement).style.borderColor = '#c9a84c'; if (p.id) (e.currentTarget as HTMLElement).style.color = '#c9a84c' }}
+              onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = '#1a2235'; (e.currentTarget as HTMLElement).style.color = p.id ? '#e6e9f4' : '#4d5e7a' }}
+            >
+              {p.player}
+            </button>
+          ))}
+        </div>
+      )}
 
       <div style={{ textAlign: 'center' }}>
         <a

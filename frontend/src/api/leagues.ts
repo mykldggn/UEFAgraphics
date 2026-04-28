@@ -66,6 +66,9 @@ export const leaguesApi = {
     request<{ crest: string | null; venue: string | null; founded: number | null; address: string | null }>(
       `/leagues/${leagueId}/team-meta`, { team_name: teamName, season }
     ),
+
+  teamColors: (leagueId: string, season: number) =>
+    request<Record<string, string>>(`/leagues/${leagueId}/team-colors`, { season }),
 }
 
 export interface LeaderEntry {

@@ -49,7 +49,7 @@ def render(
     for sp in ax_pos.spines.values():
         sp.set_edgecolor("#374151")
 
-    if position_history:
+    if position_history and len(position_history) >= 5:
         matchdays = [p["matchday"] for p in position_history]
         positions = [p["position"] for p in position_history]
         ax_pos.plot(matchdays, positions, color=primary, lw=2.2, zorder=3)
@@ -58,13 +58,30 @@ def render(
                             color=primary, alpha=0.10, zorder=2)
         ax_pos.scatter(matchdays[-1], positions[-1], s=80, color=primary,
                        zorder=5, edgecolors=BG, lw=1.5)
+        # Annotate final position
+        ax_pos.text(matchdays[-1] + 0.5, positions[-1],
+                    f"P{positions[-1]}", fontsize=8, color=primary,
+                    va="center", fontproperties=font)
         ax_pos.invert_yaxis()
         ax_pos.yaxis.set_major_locator(ticker.MaxNLocator(integer=True, nbins=6))
-        ax_pos.set_xlim(min(matchdays), max(matchdays))
+        ax_pos.set_xlim(min(matchdays), max(matchdays) + 1)
     else:
-        ax_pos.text(0.5, 0.5, "No position data", color=TEXT_SUB,
-                    ha="center", va="center", transform=ax_pos.transAxes,
-                    fontproperties=font)
+        # Sparse data — show final position as large text
+        final_pos = stats.get("final_position") or (
+            position_history[0]["position"] if position_history else None
+        )
+        if final_pos:
+            ax_pos.text(0.5, 0.55, f"P{int(final_pos)}", fontsize=56,
+                        color=primary, ha="center", va="center",
+                        fontproperties=font, fontweight="bold",
+                        transform=ax_pos.transAxes, alpha=0.85)
+            ax_pos.text(0.5, 0.18, "Final League Position", fontsize=9,
+                        color=TEXT_SUB, ha="center", va="center",
+                        fontproperties=font, transform=ax_pos.transAxes)
+        else:
+            ax_pos.text(0.5, 0.5, "No position data", color=TEXT_SUB,
+                        ha="center", va="center", transform=ax_pos.transAxes,
+                        fontproperties=font)
 
     ax_pos.tick_params(colors=TEXT_SUB, labelsize=8)
     ax_pos.set_ylabel("League Position", color=TEXT_SUB, fontsize=9, fontproperties=font)

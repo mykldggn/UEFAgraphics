@@ -7,7 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import settings
-from app.routers import leagues, infographics
+from app.routers import leagues, infographics, matches
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
 
@@ -39,6 +39,7 @@ app.add_middleware(
 
 app.include_router(leagues.router)
 app.include_router(infographics.router)
+app.include_router(matches.router)
 
 
 @app.get("/health")
