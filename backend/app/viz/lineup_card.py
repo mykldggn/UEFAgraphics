@@ -201,7 +201,26 @@ def _order_fwd_line(players: list[dict]) -> list[dict]:
 
 # ── Formation coordinate lookup ───────────────────────────────────────────────
 
-def _formation_coords(n_def: int, n_mid: int, n_fwd: int) -> list[tuple[float, float]]:
+def _is_dm(p: dict) -> bool:
+    """Defensive mid: first token D or M, second token M with no F/AM."""
+    toks = _tokens(p)
+    tok_set = set(toks)
+    if not toks or "F" in tok_set or "AM" in tok_set or "GK" in tok_set or toks[0] == "D":
+        return False
+    # 'M D' or 'D M' already classed as DEF; pure 'M' with a D secondary = DM
+    return "D" in tok_set
+
+
+def _is_am(p: dict) -> bool:
+    """Attacking mid: has AM token and is classified MID (not FWD)."""
+    toks = _tokens(p)
+    return "AM" in set(toks)
+
+
+def _formation_coords(
+    n_def: int, n_mid: int, n_fwd: int,
+    mid_players: list[dict] | None = None
+) -> list[tuple[float, float]]:
     """Return 11 (x, y) Opta positions: GK + DEF row + MID row(s) + FWD row."""
 
     def _spread(n: int, y: float) -> list[tuple[float, float]]:
@@ -212,12 +231,41 @@ def _formation_coords(n_def: int, n_mid: int, n_fwd: int) -> list[tuple[float, f
 
     coords: list[tuple[float, float]] = [(50.0, 8.0)]   # GK
     coords += _spread(n_def, 27.0)
-    if n_mid > 5:
+
+    # Mid layering: detect DM / CM / AM sub-groups when mid_players is provided
+    if mid_players and n_mid >= 3:
+        dms = [p for p in mid_players if _is_dm(p)]
+        ams = [p for p in mid_players if _is_am(p) and not _is_dm(p)]
+        cms = [p for p in mid_players if not _is_dm(p) and not _is_am(p)]
+
+        # Only split into layers when we have meaningful groupings
+        if dms and (cms or ams):
+            n_dm = len(dms); n_cm = len(cms); n_am = len(ams)
+            if n_am and n_cm:
+                coords += _spread(n_dm, 40.0)
+                coords += _spread(n_cm, 53.0)
+                coords += _spread(n_am, 65.0)
+            elif n_dm and n_cm:
+                coords += _spread(n_dm, 43.0)
+                coords += _spread(n_cm, 58.0)
+            elif n_dm and n_am:
+                coords += _spread(n_dm, 43.0)
+                coords += _spread(n_am, 63.0)
+            else:
+                coords += _spread(n_mid, 52.0)
+        elif n_mid > 5:
+            mid1 = n_mid // 2
+            coords += _spread(mid1, 47.0)
+            coords += _spread(n_mid - mid1, 62.0)
+        else:
+            coords += _spread(n_mid, 52.0)
+    elif n_mid > 5:
         mid1 = n_mid // 2
         coords += _spread(mid1, 47.0)
         coords += _spread(n_mid - mid1, 62.0)
     else:
         coords += _spread(n_mid, 52.0)
+
     coords += _spread(n_fwd, 76.0)
     return coords
 
@@ -297,7 +345,7 @@ def build_xi(players: list[dict]) -> tuple[list[dict], str]:
     fwd_ordered = _order_fwd_line(xi_fwd)
 
     xi_ordered = xi_gk + def_ordered + mid_ordered + fwd_ordered
-    coords     = _formation_coords(n_def, n_mid, n_fwd)
+    coords     = _formation_coords(n_def, n_mid, n_fwd, mid_players=mid_ordered)
 
     result = []
     for player, (x, y) in zip(xi_ordered, coords):
