@@ -128,10 +128,12 @@ def render(
     fig.text(0.515, 0.025, "Percentile vs league peers  ·  Data: Understat  ·  UEFAgraphics",
              ha="center", va="bottom", fontsize=8, fontproperties=font, color="#374151")
 
-    # Legend pills — placed below subtitle with enough clearance
+    # Legend pills — centered below subtitle
+    # 3 pills, spacing 0.18 apart, centered at 0.515
+    pill_labels = {"high": "Top 20%", "mid": "Top 60%", "low": "Bottom 40%"}
+    pill_xs = [0.515 - 0.18, 0.515, 0.515 + 0.18]
     for xi, (label, col) in enumerate(SLICE_COLORS.items()):
-        fig.text(0.28 + xi * 0.16, 0.905,
-                 {"high": "Top 20%", "mid": "Top 60%", "low": "Bottom 40%"}[label],
+        fig.text(pill_xs[xi], 0.905, pill_labels[label],
                  ha="center", fontsize=8, color=col, fontproperties=font,
                  bbox=dict(facecolor=BG_CARD, edgecolor=col, boxstyle="round,pad=0.3", lw=1))
 
