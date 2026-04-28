@@ -38,7 +38,7 @@ function MatchCard({ m }: { m: FootballMatch }) {
             onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none' }} />
         )}
         <span style={{ fontSize: 12, color: '#e6e9f4', fontWeight: m.isLive ? 600 : 400 }}>
-          {m.homeShort || m.homeTeam.slice(0, 3).toUpperCase()}
+          {m.homeShort || (m.homeTeam ?? '').slice(0, 3).toUpperCase()}
         </span>
       </div>
 
@@ -57,7 +57,7 @@ function MatchCard({ m }: { m: FootballMatch }) {
       {/* Away */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
         <span style={{ fontSize: 12, color: '#e6e9f4', fontWeight: m.isLive ? 600 : 400 }}>
-          {m.awayShort || m.awayTeam.slice(0, 3).toUpperCase()}
+          {m.awayShort || (m.awayTeam ?? '').slice(0, 3).toUpperCase()}
         </span>
         {m.awayCrest && (
           <img src={m.awayCrest} alt="" style={{ width: 16, height: 16, objectFit: 'contain' }}
@@ -87,7 +87,7 @@ export default function ScoresTicker() {
 
   const fetchMatches = () => {
     matchesApi.today(today)
-      .then(r => { setMatches(r.matches); setLoading(false) })
+      .then(r => { setMatches(Array.isArray(r?.matches) ? r.matches : []); setLoading(false) })
       .catch(() => setLoading(false))
   }
 
