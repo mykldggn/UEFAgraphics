@@ -143,24 +143,25 @@ export default function HomePage() {
   return (
     <div>
 
-      {/* Hero — full AppLayout width, no overflow clip so trophies show */}
+      {/* Hero — full AppLayout width, overflow hidden so UCL logo stays inside */}
       <div style={{
         textAlign: 'center',
         padding: '48px 16px 40px',
         position: 'relative',
+        overflow: 'hidden',
       }}>
-        {/* UCL logo watermark — centered, screen blend so bg doesn't show as white slab */}
+        {/* UCL logo watermark — sits behind the title text, clipped by overflow:hidden */}
         <img
           src="/ucl-logo.png"
           alt=""
           aria-hidden
           style={{
             position: 'absolute',
-            top: '50%',
+            top: '30%',
             left: '50%',
-            transform: 'translate(-50%, -50%)',
-            width: 420,
-            opacity: 0.16,
+            transform: 'translate(-50%, -30%)',
+            width: 400,
+            opacity: 0.14,
             filter: 'invert(1) grayscale(1)',
             mixBlendMode: 'screen',
             pointerEvents: 'none',
