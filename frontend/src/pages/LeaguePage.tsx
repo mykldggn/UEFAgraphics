@@ -60,14 +60,167 @@ function FormPills({ form }: { form: string }) {
   )
 }
 
-// Zone key definitions
-const ZONE_KEY = [
-  { color: '#c9a84c', label: 'League Winners' },
-  { color: '#1e3a8a', label: 'Champions League' },
-  { color: '#f97316', label: 'Europa League' },
-  { color: '#84cc16', label: 'Conference League' },
-  { color: '#e63946', label: 'Relegation' },
-]
+// Zone colours
+const ZONE_COLOR = {
+  champion:    '#c9a84c',  // gold
+  promotion:   '#16a34a',  // green (automatic promotion, no European)
+  playoff:     '#4ade80',  // light green (promotion playoff)
+  cl:          '#1e3a8a',  // navy
+  el:          '#f97316',  // orange
+  ecl:         '#84cc16',  // lime
+  rel_playoff: '#f97316',  // orange (relegation playoff)
+  relegation:  '#e63946',  // red
+} as const
+
+type ZoneType = keyof typeof ZONE_COLOR
+
+interface ZoneEntry { from: number; to: number; type: ZoneType }
+
+// Per-league zone definitions — covers promotion, European, and relegation slots
+const LEAGUE_ZONES: Record<string, ZoneEntry[]> = {
+  // ── England ─────────────────────────────────────────────────────────────
+  'ENG-1': [  // Premier League, 20 teams
+    { from: 1, to: 1, type: 'champion' },
+    { from: 2, to: 4, type: 'cl' },
+    { from: 5, to: 5, type: 'el' },
+    { from: 6, to: 6, type: 'ecl' },
+    { from: 18, to: 20, type: 'relegation' },
+  ],
+  'ENG-2': [  // Championship, 24 teams — no European football
+    { from: 1, to: 1, type: 'champion' },
+    { from: 2, to: 2, type: 'promotion' },
+    { from: 3, to: 6,  type: 'playoff' },
+    { from: 21, to: 24, type: 'relegation' },  // 4 relegated
+  ],
+  'ENG-3': [  // League One, 24 teams
+    { from: 1, to: 1,  type: 'champion' },
+    { from: 2, to: 2,  type: 'promotion' },
+    { from: 3, to: 6,  type: 'playoff' },
+    { from: 21, to: 24, type: 'relegation' },
+  ],
+  'ENG-4': [  // League Two, 24 teams — top 3 auto, 4-7 playoff
+    { from: 1, to: 1,  type: 'champion' },
+    { from: 2, to: 3,  type: 'promotion' },
+    { from: 4, to: 7,  type: 'playoff' },
+    { from: 23, to: 24, type: 'relegation' },  // 2 relegated to non-league
+  ],
+  // ── Spain ───────────────────────────────────────────────────────────────
+  'ESP-1': [  // La Liga, 20 teams
+    { from: 1, to: 1, type: 'champion' },
+    { from: 2, to: 4, type: 'cl' },
+    { from: 5, to: 6, type: 'el' },
+    { from: 7, to: 7, type: 'ecl' },
+    { from: 18, to: 20, type: 'relegation' },
+  ],
+  // ── Germany ─────────────────────────────────────────────────────────────
+  'DEU-1': [  // Bundesliga, 18 teams
+    { from: 1, to: 1, type: 'champion' },
+    { from: 2, to: 4, type: 'cl' },
+    { from: 5, to: 5, type: 'el' },
+    { from: 6, to: 6, type: 'ecl' },
+    { from: 16, to: 16, type: 'rel_playoff' },
+    { from: 17, to: 18, type: 'relegation' },
+  ],
+  'DEU-2': [  // 2. Bundesliga, 18 teams
+    { from: 1, to: 1,  type: 'champion' },
+    { from: 2, to: 2,  type: 'promotion' },
+    { from: 3, to: 3,  type: 'playoff' },
+    { from: 16, to: 16, type: 'rel_playoff' },
+    { from: 17, to: 18, type: 'relegation' },
+  ],
+  // ── Italy ────────────────────────────────────────────────────────────────
+  'ITA-1': [  // Serie A, 20 teams
+    { from: 1, to: 1, type: 'champion' },
+    { from: 2, to: 4, type: 'cl' },
+    { from: 5, to: 6, type: 'el' },
+    { from: 7, to: 7, type: 'ecl' },
+    { from: 18, to: 20, type: 'relegation' },
+  ],
+  // ── France ──────────────────────────────────────────────────────────────
+  'FRA-1': [  // Ligue 1, 18 teams
+    { from: 1, to: 1, type: 'champion' },
+    { from: 2, to: 3, type: 'cl' },
+    { from: 4, to: 5, type: 'el' },
+    { from: 6, to: 6, type: 'ecl' },
+    { from: 16, to: 16, type: 'rel_playoff' },
+    { from: 17, to: 18, type: 'relegation' },
+  ],
+  // ── Netherlands ──────────────────────────────────────────────────────────
+  'NED-1': [  // Eredivisie, 18 teams
+    { from: 1, to: 1, type: 'champion' },
+    { from: 2, to: 2, type: 'cl' },
+    { from: 3, to: 3, type: 'el' },
+    { from: 4, to: 6, type: 'ecl' },
+    { from: 16, to: 16, type: 'rel_playoff' },
+    { from: 17, to: 18, type: 'relegation' },
+  ],
+  // ── Portugal ─────────────────────────────────────────────────────────────
+  'PRT-1': [  // Primeira Liga, 18 teams
+    { from: 1, to: 1, type: 'champion' },
+    { from: 2, to: 2, type: 'cl' },
+    { from: 3, to: 4, type: 'el' },
+    { from: 5, to: 5, type: 'ecl' },
+    { from: 16, to: 17, type: 'rel_playoff' },
+    { from: 18, to: 18, type: 'relegation' },
+  ],
+  // ── Belgium ──────────────────────────────────────────────────────────────
+  'BEL-1': [  // Pro League, 18 teams (simplified — ignores Championship playoffs)
+    { from: 1, to: 1, type: 'champion' },
+    { from: 2, to: 2, type: 'cl' },
+    { from: 3, to: 4, type: 'el' },
+    { from: 5, to: 5, type: 'ecl' },
+    { from: 16, to: 18, type: 'relegation' },
+  ],
+  // ── Scotland ─────────────────────────────────────────────────────────────
+  'SCO-1': [  // Scottish Premiership, 12 teams
+    { from: 1, to: 1, type: 'champion' },
+    { from: 2, to: 2, type: 'cl' },
+    { from: 3, to: 4, type: 'el' },
+    { from: 5, to: 6, type: 'ecl' },
+    { from: 11, to: 11, type: 'rel_playoff' },
+    { from: 12, to: 12, type: 'relegation' },
+  ],
+  // ── Turkey ───────────────────────────────────────────────────────────────
+  'TUR-1': [  // Süper Lig, 19 teams
+    { from: 1, to: 1, type: 'champion' },
+    { from: 2, to: 2, type: 'cl' },
+    { from: 3, to: 4, type: 'el' },
+    { from: 5, to: 5, type: 'ecl' },
+    { from: 16, to: 17, type: 'rel_playoff' },
+    { from: 18, to: 19, type: 'relegation' },
+  ],
+}
+
+// Build dynamic zone key for the current league
+function buildZoneKey(leagueId: string | undefined): { color: string; label: string }[] {
+  const zones = leagueId ? LEAGUE_ZONES[leagueId] : undefined
+  if (!zones) return [
+    { color: ZONE_COLOR.champion, label: 'League Winners' },
+    { color: ZONE_COLOR.cl, label: 'Champions League' },
+    { color: ZONE_COLOR.el, label: 'Europa League' },
+    { color: ZONE_COLOR.ecl, label: 'Conference League' },
+    { color: ZONE_COLOR.relegation, label: 'Relegation' },
+  ]
+  const seen = new Set<ZoneType>()
+  const key: { color: string; label: string }[] = []
+  const LABELS: Record<ZoneType, string> = {
+    champion:    'League Winners',
+    promotion:   'Automatic Promotion',
+    playoff:     'Promotion Playoff',
+    cl:          'Champions League',
+    el:          'Europa League',
+    ecl:         'Conference League',
+    rel_playoff: 'Relegation Playoff',
+    relegation:  'Relegation',
+  }
+  for (const z of zones) {
+    if (!seen.has(z.type)) {
+      seen.add(z.type)
+      key.push({ color: ZONE_COLOR[z.type], label: LABELS[z.type] })
+    }
+  }
+  return key
+}
 
 function LeaderBoard({
   title, entries, unit = '', onPlayerClick,
@@ -205,35 +358,17 @@ export default function LeaguePage() {
   const leagueName = leagueId.replace('-', ' ')
   const numInLeague = table.length || 20
 
-  // Per-league qualification zone definitions
-  // { cl: last CL pos, el: last EL pos, ecl: last ECL pos, playoff: playoff pos or null, rel: first relegation pos }
-  const ZONE_CONFIG: Record<string, { cl: number; el: number; ecl: number; playoff?: number; relCount: number }> = {
-    'ENG-1': { cl: 4, el: 5, ecl: 6,  relCount: 3 },         // PL: 4 CL, 5 EL, 6 ECL, 18-20 rel
-    'ESP-1': { cl: 4, el: 6, ecl: 7,  relCount: 3 },         // LL: 4 CL, 5-6 EL, 7 ECL, 18-20 rel
-    'DEU-1': { cl: 4, el: 5, ecl: 6,  playoff: 16, relCount: 2 }, // BL: 4 CL, 5 EL, 6 ECL, 16 playoff, 17-18 rel
-    'ITA-1': { cl: 4, el: 6, ecl: 7,  relCount: 3 },         // SA: 4 CL, 5-6 EL, 7 ECL, 18-20 rel
-    'FRA-1': { cl: 3, el: 5, ecl: 6,  playoff: 16, relCount: 2 }, // L1: 3 CL (4th to playoff), 5 EL, 6 ECL, 16 playoff, 17-18 rel
-    'NED-1': { cl: 2, el: 4, ecl: 5,  relCount: 3 },
-    'PRT-1': { cl: 3, el: 4, ecl: 5,  relCount: 2 },
-    'SCO-1': { cl: 1, el: 3, ecl: 4,  relCount: 2 },
-    'BEL-1': { cl: 1, el: 3, ecl: 4,  relCount: 2 },
-  }
-
   function posZoneColor(pos: number): string {
-    const cfg = leagueId ? ZONE_CONFIG[leagueId] : null
-    const cl  = cfg?.cl  ?? 4
-    const el  = cfg?.el  ?? 6
-    const ecl = cfg?.ecl ?? 7
-    const relCount = cfg?.relCount ?? 3
-    const relStart = numInLeague - relCount + 1
-
-    if (pos === 1)                              return '#c9a84c'  // Champion — gold
-    if (pos <= cl)                              return '#1e3a8a'  // CL — navy
-    if (pos <= el)                              return '#f97316'  // EL — orange
-    if (pos <= ecl)                             return '#84cc16'  // ECL — lime
-    if (cfg?.playoff && pos === cfg.playoff)    return '#f97316'  // Relegation playoff — orange
-    if (pos >= relStart)                        return '#e63946'  // Relegation — red
-    return 'transparent'
+    const zones = leagueId ? LEAGUE_ZONES[leagueId] : undefined
+    if (!zones) {
+      // Sensible defaults for unknown leagues
+      if (pos === 1) return ZONE_COLOR.champion
+      if (pos <= 4)  return ZONE_COLOR.cl
+      if (pos > numInLeague - 3) return ZONE_COLOR.relegation
+      return 'transparent'
+    }
+    const zone = zones.find(z => pos >= z.from && pos <= z.to)
+    return zone ? ZONE_COLOR[zone.type] : 'transparent'
   }
 
   // Row suffix badges: champion crown, relegated R
@@ -301,9 +436,9 @@ export default function LeaguePage() {
       {!loading && activeTab === 'table' && (
         table.length > 0 ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            {/* Zone key */}
+            {/* Zone key — dynamic per league */}
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, paddingLeft: 4 }}>
-              {ZONE_KEY.map(z => (
+              {buildZoneKey(leagueId).map(z => (
                 <div key={z.label} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#4d5e7a' }}>
                   <span style={{ width: 10, height: 10, borderRadius: 2, background: z.color, flexShrink: 0 }} />
                   {z.label}

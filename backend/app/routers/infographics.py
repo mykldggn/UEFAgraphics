@@ -237,54 +237,44 @@ def team_xg_timeline_img(
     season: int    = Query(...),
     league_id: str = Query(None),
 ):
-    # Resolve to Understat team ID (fdorg IDs differ from Understat IDs)
-    us_team_id = team_id
-    if league_id:
-        us_slug = understat.LEAGUE_TO_US.get(league_id)
-        if us_slug:
-            us_teams = understat.get_league_teams(us_slug, season)
-            us_team  = next(
-                (t for t in us_teams if _team_match(team_name, t["name"])), None
-            )
-            if us_team:
-                us_team_id = us_team["id"]
+    us_slug    = understat.LEAGUE_TO_US.get(league_id) if league_id else None
+    has_xg     = bool(us_slug)
+    history: list[dict] = []
 
-    ck = {"type": "team_xg_timeline", "team_id": us_team_id, "season": season}
-    if cached := cache.img_get("infographic", ck):
-        return _png(cached)
+    if us_slug:
+        # Top-5 league: resolve Understat team ID and fetch xG history
+        us_team_id = team_id
+        us_teams   = understat.get_league_teams(us_slug, season)
+        us_team    = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
+        if us_team:
+            us_team_id = us_team["id"]
+        ck = {"type": "team_xg_timeline", "team_id": us_team_id, "season": season}
+        if cached := cache.img_get("infographic", ck):
+            return _png(cached)
+        try:
+            history = understat.get_team_xg_history(us_team_id, season, league=us_slug)
+        except Exception as exc:
+            logger.error(f"team xg timeline {us_team_id}/{season}: {exc}")
+    else:
+        # Non-top-5 league: use football-data.org results (no xG)
+        ck = {"type": "team_timeline_fdorg", "team_id": team_id, "season": season}
+        if cached := cache.img_get("infographic", ck):
+            return _png(cached)
+        try:
+            history = fdorg.get_team_results(team_id, season)
+        except Exception as exc:
+            logger.error(f"team results fdorg {team_id}/{season}: {exc}")
 
-    us_slug = understat.LEAGUE_TO_US.get(league_id) if league_id else None
-    try:
-        history = understat.get_team_xg_history(us_team_id, season, league=us_slug)
-    except Exception as exc:
-        logger.error(f"team xg timeline {us_team_id}/{season}: {exc}")
-        raise HTTPException(503, "Failed to fetch team xG history")
+    if not history:
+        raise HTTPException(503, "No match data available for this team/season")
 
-    # Enrich with FotMob opponent data (best-effort)
-    opponents: list[dict] | None = None
-    try:
-        fm_team_id = fotmob.search_team(team_name)
-        if fm_team_id:
-            fixtures = fotmob.get_team_fixtures(fm_team_id)
-            if fixtures:
-                # Build a date → {name, crest_url} lookup from FotMob
-                fm_by_date: dict[str, dict] = {
-                    f["date"]: {"name": f["opponent"], "crest_url": f["opponentCrest"]}
-                    for f in fixtures
-                }
-                opponents = []
-                for h in history:
-                    date_str = str(h.get("date", ""))[:10]
-                    opp = fm_by_date.get(date_str)
-                    if opp is None:
-                        # Fall back to Understat opponent name from history
-                        opp = {"name": h.get("opponent", ""), "crest_url": ""}
-                    opponents.append(opp)
-    except Exception as exc:
-        logger.debug(f"FotMob opponent enrichment failed for {team_name}: {exc}")
+    # Opponent name enrichment from history (FotMob blocked on Railway, skip)
+    opponents: list[dict] | None = [
+        {"name": h.get("opponent", ""), "crest_url": ""} for h in history
+    ] if history else None
 
     png = team_xg_timeline.render(team_name, _season_label(season), history,
-                                  opponents=opponents)
+                                  opponents=opponents, has_xg=has_xg)
     cache.img_save("infographic", ck, png)
     return _png(png)
 
@@ -392,7 +382,7 @@ def team_lineup_players(
     """Return XI player list as JSON (for clickable overlays)."""
     us_slug = understat.LEAGUE_TO_US.get(league_id)
     if not us_slug:
-        return {"players": [], "formation": ""}
+        return {"players": [], "formation": "", "unavailable": True}
 
     us_teams  = understat.get_league_teams(us_slug, season)
     us_team   = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
@@ -433,7 +423,13 @@ def team_lineup(
 
     us_slug = understat.LEAGUE_TO_US.get(league_id)
     if not us_slug:
-        raise HTTPException(400, "Lineup only available for Understat leagues")
+        from app.viz.common import get_font
+        png = lineup_viz._no_data_png(
+            team_name,
+            f"Most Played XI unavailable — xG/lineup data only covers top 5 leagues",
+            get_font(),
+        )
+        return _png(png)
 
     # Resolve Understat team name
     us_teams  = understat.get_league_teams(us_slug, season)

@@ -41,11 +41,10 @@ def render(
     team_name: str,
     season_label: str,
     history: list[dict],
-    # Each dict: match, date, opponent, xG, xGA, cumulative_xG, cumulative_xGA,
-    #            goals, goals_against
     # Optional per-match enrichment from FotMob
     opponents: list[dict] | None = None,
-    # opponents[i] = {"name": "Man City", "crest_url": "https://..."}
+    # When False (non-top-5 leagues), skip xG lines and show cumulative goals instead
+    has_xg: bool = True,
 ) -> bytes:
     font    = get_font()
     primary = team_color(team_name)
@@ -96,28 +95,44 @@ def render(
 
     xs = np.array(matches)
 
-    # ── Top panel: cumulative xG vs xGA ────────────────────────────────────────
+    # ── Top panel: cumulative xG (or goals when xG unavailable) ───────────────
     ax_cum = fig.add_axes([0.08, 0.51, 0.88, 0.40])
     ax_cum.set_facecolor(BG)
     for sp in ax_cum.spines.values():
         sp.set_edgecolor("#374151")
 
-    ax_cum.plot(xs, cum_xg,  color=GREEN,   lw=2.2, label="Cumulative xG",  zorder=3)
-    ax_cum.plot(xs, cum_xga, color=RED,     lw=2.2, label="Cumulative xGA", zorder=3)
-    ax_cum.fill_between(xs, cum_xg, cum_xga,
-                        where=np.array(cum_xg) >= np.array(cum_xga),
-                        alpha=0.12, color=GREEN, interpolate=True)
-    ax_cum.fill_between(xs, cum_xg, cum_xga,
-                        where=np.array(cum_xg) < np.array(cum_xga),
-                        alpha=0.12, color=RED, interpolate=True)
-
-    ax_cum.scatter(xs, np.cumsum(goals),        s=30, color=GREEN, zorder=5,
-                   alpha=0.7, label="Actual Goals")
-    ax_cum.scatter(xs, np.cumsum(goals_against), s=30, color=RED,   zorder=5,
-                   alpha=0.7, marker="v", label="Goals Conceded")
+    if has_xg:
+        ax_cum.plot(xs, cum_xg,  color=GREEN, lw=2.2, label="Cumulative xG",  zorder=3)
+        ax_cum.plot(xs, cum_xga, color=RED,   lw=2.2, label="Cumulative xGA", zorder=3)
+        ax_cum.fill_between(xs, cum_xg, cum_xga,
+                            where=np.array(cum_xg) >= np.array(cum_xga),
+                            alpha=0.12, color=GREEN, interpolate=True)
+        ax_cum.fill_between(xs, cum_xg, cum_xga,
+                            where=np.array(cum_xg) < np.array(cum_xga),
+                            alpha=0.12, color=RED, interpolate=True)
+        ax_cum.scatter(xs, np.cumsum(goals),         s=30, color=GREEN, zorder=5,
+                       alpha=0.7, label="Actual Goals")
+        ax_cum.scatter(xs, np.cumsum(goals_against),  s=30, color=RED,   zorder=5,
+                       alpha=0.7, marker="v", label="Goals Conceded")
+        ax_cum.set_ylabel("Cumulative xG", color=TEXT_SUB, fontsize=9, fontproperties=font)
+    else:
+        # No xG available — show cumulative goals/conceded lines
+        cum_g  = np.cumsum(goals)
+        cum_ga = np.cumsum(goals_against)
+        ax_cum.plot(xs, cum_g,  color=GREEN, lw=2.2, label="Goals Scored",   zorder=3)
+        ax_cum.plot(xs, cum_ga, color=RED,   lw=2.2, label="Goals Conceded", zorder=3)
+        ax_cum.fill_between(xs, cum_g, cum_ga,
+                            where=cum_g >= cum_ga,
+                            alpha=0.12, color=GREEN, interpolate=True)
+        ax_cum.fill_between(xs, cum_g, cum_ga,
+                            where=cum_g < cum_ga,
+                            alpha=0.12, color=RED, interpolate=True)
+        ax_cum.set_ylabel("Cumulative Goals", color=TEXT_SUB, fontsize=9, fontproperties=font)
+        ax_cum.text(0.5, 0.96, "xG data not available for this league",
+                    transform=ax_cum.transAxes, fontsize=8, color=TEXT_SUB,
+                    ha="center", va="top", fontproperties=font, alpha=0.7)
 
     ax_cum.tick_params(colors=TEXT_SUB, labelsize=8)
-    ax_cum.set_ylabel("Cumulative", color=TEXT_SUB, fontsize=9, fontproperties=font)
     ax_cum.legend(frameon=False, labelcolor=TEXT, prop=font, fontsize=8,
                   loc="upper left", ncol=2)
     ax_cum.grid(axis="y", color="#1F2937", lw=0.6)
@@ -164,12 +179,20 @@ def render(
 
     # Custom legend
     from matplotlib.patches import Patch
-    legend_els = [
-        Patch(facecolor="#22C55E", alpha=0.85, label="W · xG For"),
-        Patch(facecolor="#F59E0B", alpha=0.85, label="D · xG For"),
-        Patch(facecolor="#EF4444", alpha=0.85, label="L · xG For"),
-        Patch(facecolor="#6B7280", alpha=0.60, label="xG Against"),
-    ]
+    if has_xg:
+        legend_els = [
+            Patch(facecolor="#22C55E", alpha=0.85, label="W · xG For"),
+            Patch(facecolor="#F59E0B", alpha=0.85, label="D · xG For"),
+            Patch(facecolor="#EF4444", alpha=0.85, label="L · xG For"),
+            Patch(facecolor="#6B7280", alpha=0.60, label="xG Against"),
+        ]
+    else:
+        legend_els = [
+            Patch(facecolor="#22C55E", alpha=0.85, label="W · Goals Scored"),
+            Patch(facecolor="#F59E0B", alpha=0.85, label="D · Goals Scored"),
+            Patch(facecolor="#EF4444", alpha=0.85, label="L · Goals Scored"),
+            Patch(facecolor="#6B7280", alpha=0.60, label="Goals Conceded"),
+        ]
     ax_bar.legend(handles=legend_els, frameon=False, labelcolor=TEXT, prop=font,
                   fontsize=7, ncol=4, loc="upper right")
     ax_bar.grid(axis="y", color="#1F2937", lw=0.6)
@@ -200,10 +223,19 @@ def render(
     total_g   = sum(goals)
     total_ga  = sum(goals_against)
 
-    fig.text(0.5, 0.015,
-             f"xG: {total_xg:.1f}   xGA: {total_xga:.1f}   "
-             f"Goals: {total_g}   Goals Against: {total_ga}"
-             f"   Data: Understat  ·  UEFAgraphics",
+    if has_xg:
+        footer = (f"xG: {total_xg:.1f}   xGA: {total_xga:.1f}   "
+                  f"Goals: {total_g}   Goals Against: {total_ga}"
+                  f"   Data: Understat  ·  UEFAgraphics")
+    else:
+        wins  = sum(1 for r in results if r.lower() == "w")
+        draws = sum(1 for r in results if r.lower() == "d")
+        losses = sum(1 for r in results if r.lower() == "l")
+        footer = (f"W {wins}  D {draws}  L {losses}   "
+                  f"Goals: {total_g}   Goals Against: {total_ga}   GD: {total_g - total_ga:+d}"
+                  f"   Data: football-data.org  ·  UEFAgraphics")
+
+    fig.text(0.5, 0.015, footer,
              fontsize=8, color="#374151", ha="center", va="bottom", fontproperties=font)
 
     return fig_to_png(fig, dpi=150)

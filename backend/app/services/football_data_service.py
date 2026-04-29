@@ -186,6 +186,65 @@ def get_team_coach(fdorg_team_id: str) -> str:
     return name
 
 
+def get_team_results(fdorg_team_id: str, season: int) -> list[dict]:
+    """
+    Return per-match results for a team from football-data.org.
+    Used as fallback for non-Understat leagues (no xG available).
+    Each dict: match, date, opponent, goals, goals_against, result, h_a
+    """
+    ck = {"src": "fdorg", "team_id": fdorg_team_id, "season": season, "type": "results"}
+    cached = cache.json_get("fdorg_team_results", ck, ttl_hours=6)
+    if cached is not None:
+        return cached
+
+    data = _get(f"teams/{fdorg_team_id}/matches?season={season}&status=FINISHED")
+    if not data:
+        return []
+
+    team_id_int = int(fdorg_team_id) if fdorg_team_id.isdigit() else None
+    results: list[dict] = []
+    for m in data.get("matches", []):
+        score  = m.get("score", {})
+        ft     = score.get("fullTime", {})
+        home_s = ft.get("home")
+        away_s = ft.get("away")
+        if home_s is None or away_s is None:
+            continue
+        home_id   = m.get("homeTeam", {}).get("id")
+        is_home   = home_id == team_id_int
+        gf        = int(home_s if is_home else away_s)
+        ga        = int(away_s if is_home else home_s)
+        opp_key   = "awayTeam" if is_home else "homeTeam"
+        opponent  = m.get(opp_key, {}).get("shortName") or m.get(opp_key, {}).get("name", "")
+        if gf > ga:   result = "w"
+        elif gf == ga: result = "d"
+        else:          result = "l"
+        results.append({
+            "date":          m.get("utcDate", "")[:10],
+            "opponent":      opponent,
+            "goals":         gf,
+            "goals_against": ga,
+            "result":        result,
+            "h_a":           "H" if is_home else "A",
+        })
+
+    # Sort by date ascending, assign match numbers
+    results.sort(key=lambda r: r["date"])
+    cum_g = cum_ga = 0
+    for i, r in enumerate(results, 1):
+        r["match"] = i
+        cum_g  += r["goals"]
+        cum_ga += r["goals_against"]
+        r["xG"] = 0.0; r["xGA"] = 0.0
+        r["cumulative_xG"]  = 0.0
+        r["cumulative_xGA"] = 0.0
+        r["cumulative_goals"]         = cum_g
+        r["cumulative_goals_against"] = cum_ga
+
+    cache.json_save("fdorg_team_results", ck, results)
+    return results
+
+
 def get_top_scorers(league_id: str, season: int, limit: int = 10) -> list[dict]:
     """Return top scorers for a league+season."""
     ck = {"src": "fdorg", "league": league_id, "season": season}
