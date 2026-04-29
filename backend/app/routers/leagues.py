@@ -126,12 +126,32 @@ def league_position_history(league_id: str, season: int = Query(...)):
 @router.get("/{league_id}/leaders")
 def league_leaders(league_id: str, season: int = Query(...)):
     us_slug = understat.LEAGUE_TO_US.get(league_id)
-    if not us_slug:
-        raise HTTPException(400, "Leaders only available for Understat leagues")
-    result = understat.get_league_leaders(us_slug, season)
-    if not result:
-        raise HTTPException(503, "Could not load league leaders")
-    return {"league": league_id, "season": season, **result}
+    if us_slug:
+        result = understat.get_league_leaders(us_slug, season)
+        if not result:
+            raise HTTPException(503, "Could not load league leaders")
+        return {"league": league_id, "season": season, **result}
+
+    # Non-Understat league: use fdorg top scorers (goals + assists only)
+    scorers = fdorg.get_top_scorers(league_id, season, limit=20)
+    if not scorers:
+        raise HTTPException(503, "No leader data available for this league")
+    return {
+        "league": league_id,
+        "season": season,
+        "goals": [
+            {"player": s["player"], "team": s["team"], "value": s["goals"]}
+            for s in scorers if s.get("goals", 0) > 0
+        ],
+        "assists": sorted(
+            [{"player": s["player"], "team": s["team"], "value": s["assists"]}
+             for s in scorers if s.get("assists", 0) > 0],
+            key=lambda x: x["value"], reverse=True
+        ),
+        "xg": [],
+        "key_passes": [],
+        "shots": [],
+    }
 
 
 @router.get("/{league_id}/team-meta")
@@ -158,7 +178,7 @@ def get_team_meta(league_id: str, team_name: str = Query(...), season: int = Que
 @router.get("/{league_id}/team-colors")
 def get_team_colors(league_id: str, season: int = Query(default=2024)):
     """Return {teamName: hexColor} for a league's teams."""
-    from app.viz.common import TEAM_COLORS, ACCENT
+    from app.viz.common import team_color
     us_slug = understat.LEAGUE_TO_US.get(league_id)
     teams: list[str] = []
     if us_slug:
@@ -167,8 +187,7 @@ def get_team_colors(league_id: str, season: int = Query(default=2024)):
     else:
         fdorg_teams = fdorg.get_teams(league_id, season)
         teams = [t["name"] for t in fdorg_teams]
-    colors = {t: TEAM_COLORS.get(t, ACCENT) for t in teams}
-    return colors
+    return {t: team_color(t) for t in teams}
 
 
 @router.get("/understat/team/{team_id}/xg-history")

@@ -62,8 +62,9 @@ def render(
                 fontsize=10, fontproperties=font, color=TEXT_SUB, va="top", zorder=3)
 
     # ── League position over time ──────────────────────────────────────────────
-    # Extra bottom padding (labelpad) pushes x-axis label clear of stats block
-    ax_pos = fig.add_axes([0.10, 0.67, 0.86, 0.21])
+    # bottom=0.70 so tick labels + xlabel (which protrude ~0.05 below) don't
+    # overlap the stats grid whose top is at 0.43+0.20=0.63.
+    ax_pos = fig.add_axes([0.10, 0.70, 0.86, 0.18])
     ax_pos.set_facecolor(BG)
     for sp in ax_pos.spines.values():
         sp.set_edgecolor("#374151")
@@ -131,7 +132,7 @@ def render(
     ]
 
     # ── Season stats grid ──────────────────────────────────────────────────────
-    ax_stats = fig.add_axes([0.02, 0.43, 0.96, 0.21])
+    ax_stats = fig.add_axes([0.02, 0.42, 0.96, 0.21])
     ax_stats.set_facecolor(BG); ax_stats.axis("off")
     ax_stats.set_xlim(0, 1); ax_stats.set_ylim(0, 1)
     n_cols = 6; n_rows = 2
@@ -154,7 +155,7 @@ def render(
                       ha="center", va="center")
 
     # ── Stats legend key ───────────────────────────────────────────────────────
-    ax_key = fig.add_axes([0.02, 0.405, 0.96, 0.020])
+    ax_key = fig.add_axes([0.02, 0.395, 0.96, 0.020])
     ax_key.set_facecolor(BG); ax_key.axis("off")
     ax_key.set_xlim(0, 1); ax_key.set_ylim(0, 1)
     KEY = ("W Wins  ·  D Draws  ·  L Losses  ·  GF Goals For  ·  GA Goals Against  ·  "

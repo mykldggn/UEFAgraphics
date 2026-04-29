@@ -257,13 +257,22 @@ def team_xg_timeline_img(
             logger.error(f"team xg timeline {us_team_id}/{season}: {exc}")
     else:
         # Non-top-5 league: use football-data.org results (no xG)
-        ck = {"type": "team_timeline_fdorg", "team_id": team_id, "season": season}
+        # Resolve numeric fdorg team ID — the URL param may be a team name string
+        fdorg_id = team_id
+        if not team_id.isdigit() and league_id:
+            table = fdorg.get_standings(league_id, season)
+            matched = next(
+                (r for r in table if _team_match(team_name, r.get("team", ""))), None
+            )
+            if matched and str(matched.get("team_id", "")).isdigit():
+                fdorg_id = str(matched["team_id"])
+        ck = {"type": "team_timeline_fdorg", "team_id": fdorg_id, "season": season}
         if cached := cache.img_get("infographic", ck):
             return _png(cached)
         try:
-            history = fdorg.get_team_results(team_id, season)
+            history = fdorg.get_team_results(fdorg_id, season)
         except Exception as exc:
-            logger.error(f"team results fdorg {team_id}/{season}: {exc}")
+            logger.error(f"team results fdorg {fdorg_id}/{season}: {exc}")
 
     if not history:
         raise HTTPException(503, "No match data available for this team/season")
@@ -286,7 +295,7 @@ def team_season_card(
     league_id: str = Query(...),
     season: int    = Query(...),
 ):
-    ck = {"type": "team_season_card", "team_id": team_id, "season": season, "v": 3}
+    ck = {"type": "team_season_card", "team_id": team_id, "season": season, "v": 4}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 

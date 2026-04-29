@@ -159,8 +159,23 @@ TEAM_COLORS: dict[str, str] = {
 }
 
 
+import re as _re
+_NAME_SUFFIX_RE = _re.compile(
+    r'\s+(F\.?C\.?|A\.?F\.?C\.?|C\.?F\.?|S\.?C\.?|S\.?L\.?)\s*$',
+    _re.IGNORECASE,
+)
+
+
+def _normalize_team(name: str) -> str:
+    """Strip common club-name suffixes (FC, AFC, CF, SC, SL) for colour lookup."""
+    return _NAME_SUFFIX_RE.sub('', name).strip()
+
+
 def team_color(name: str) -> str:
-    return TEAM_COLORS.get(name, TEAM_COLORS["_default"])
+    if name in TEAM_COLORS:
+        return TEAM_COLORS[name]
+    normalized = _normalize_team(name)
+    return TEAM_COLORS.get(normalized, TEAM_COLORS["_default"])
 
 
 # ── Font helpers ──────────────────────────────────────────────────────────────

@@ -378,13 +378,18 @@ export default function LeaguePage() {
     return null
   }
 
-  function handleTeamClick(teamName: string) {
-    // Navigate to team infographics — we need a team ID; use understat team name as ID fallback
-    navigate(`/team/${encodeURIComponent(teamName)}?name=${encodeURIComponent(teamName)}&league=${leagueId}&season=${season}`)
+  const UNDERSTAT_LEAGUES = new Set(['ENG-1', 'ESP-1', 'DEU-1', 'ITA-1', 'FRA-1'])
+  const isUnderstatLeague = UNDERSTAT_LEAGUES.has(leagueId ?? '')
+
+  function handleTeamClick(row: TableRow) {
+    // Use the numeric fdorg team_id in the URL so non-top-5 infographics can fetch match results.
+    // team_name is passed as a query param for display + matching purposes.
+    const teamId = row.team_id != null ? String(row.team_id) : encodeURIComponent(String(row.team))
+    navigate(`/team/${encodeURIComponent(teamId)}?name=${encodeURIComponent(String(row.team))}&league=${leagueId}&season=${season}`)
   }
 
   function handlePlayerClick(player: string, _team: string) {
-    navigate(`/player/${encodeURIComponent(player)}?season=${season}&league=${leagueId}&source=fbref`)
+    navigate(`/player/${encodeURIComponent(player)}?season=${season}&league=${leagueId}&source=understat`)
   }
 
   return (
@@ -466,7 +471,7 @@ export default function LeaguePage() {
                     return (
                       <tr
                         key={i}
-                        onClick={() => handleTeamClick(String(row.team))}
+                        onClick={() => handleTeamClick(row)}
                         style={{
                           borderBottom: '1px solid rgba(26,34,53,0.6)',
                           borderLeft: `3px solid ${posZoneColor(i + 1)}`,
@@ -611,11 +616,11 @@ export default function LeaguePage() {
       {!loading && activeTab === 'leaders' && (
         leaders ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-            <LeaderBoard title="Top Scorers"   entries={leaders.goals ?? []}      onPlayerClick={handlePlayerClick} />
-            <LeaderBoard title="Top Assisters" entries={leaders.assists ?? []}    onPlayerClick={handlePlayerClick} />
-            <LeaderBoard title="xG Leaders"    entries={leaders.xg ?? []}         onPlayerClick={handlePlayerClick} />
-            <LeaderBoard title="Key Passes"    entries={leaders.key_passes ?? []} onPlayerClick={handlePlayerClick} />
-            <LeaderBoard title="Most Shots"    entries={leaders.shots ?? []}      onPlayerClick={handlePlayerClick} />
+            <LeaderBoard title="Top Scorers"   entries={leaders.goals ?? []}      onPlayerClick={isUnderstatLeague ? handlePlayerClick : undefined} />
+            <LeaderBoard title="Top Assisters" entries={leaders.assists ?? []}    onPlayerClick={isUnderstatLeague ? handlePlayerClick : undefined} />
+            {(leaders.xg ?? []).length > 0 && <LeaderBoard title="xG Leaders"    entries={leaders.xg ?? []}         onPlayerClick={isUnderstatLeague ? handlePlayerClick : undefined} />}
+            {(leaders.key_passes ?? []).length > 0 && <LeaderBoard title="Key Passes" entries={leaders.key_passes ?? []} onPlayerClick={isUnderstatLeague ? handlePlayerClick : undefined} />}
+            {(leaders.shots ?? []).length > 0 && <LeaderBoard title="Most Shots"  entries={leaders.shots ?? []}      onPlayerClick={isUnderstatLeague ? handlePlayerClick : undefined} />}
           </div>
         ) : (
           !error && <div style={{ textAlign: 'center', padding: '48px 0', color: '#4d5e7a', fontSize: 13 }}>Leaders not available for this league.</div>
