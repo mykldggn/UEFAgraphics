@@ -62,9 +62,10 @@ function FormPills({ form }: { form: string }) {
 
 // Zone key definitions
 const ZONE_KEY = [
-  { color: '#c9a84c', label: 'Champions League' },
-  { color: '#4a9eff', label: 'Europa League' },
-  { color: '#4dc478', label: 'Conference League' },
+  { color: '#c9a84c', label: 'League Winners' },
+  { color: '#1e3a8a', label: 'Champions League' },
+  { color: '#f97316', label: 'Europa League' },
+  { color: '#84cc16', label: 'Conference League' },
   { color: '#e63946', label: 'Relegation' },
 ]
 
@@ -206,11 +207,11 @@ export default function LeaguePage() {
 
   // Position zone border colors — supports 18, 20-team leagues
   function posZoneColor(pos: number): string {
-    if (pos === 1) return '#c9a84c'          // Champion — gold
-    if (pos <= 4) return '#4a9eff'           // CL — blue (top 4)
-    if (pos <= 6) return '#06B6D4'           // EL
-    if (pos <= 7) return '#4dc478'           // Conference League
-    if (pos > numInLeague - 3) return '#e63946' // Relegation (bottom 3)
+    if (pos === 1) return '#c9a84c'             // Champion — gold
+    if (pos <= 4) return '#1e3a8a'              // CL — navy
+    if (pos <= 6) return '#f97316'              // EL — orange
+    if (pos <= 7) return '#84cc16'              // Conference League — lime
+    if (pos > numInLeague - 3) return '#e63946' // Relegation — red
     return 'transparent'
   }
 

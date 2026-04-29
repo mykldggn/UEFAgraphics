@@ -28,13 +28,13 @@ AMBER    = "#F59E0B"
 # ── Team colour registry (Understat names + common variants) ──────────────────
 TEAM_COLORS: dict[str, str] = {
     # England
-    "Arsenal": "#EF0107", "Bournemouth": "#DA291C", "Brentford": "#E30613",
+    "Arsenal": "#EF0107", "Bournemouth": "#C8102E", "Brentford": "#E30613",
     "Brighton": "#0057B8", "Burnley": "#8B1A4A", "Chelsea": "#2A5FBF",
-    "Crystal Palace": "#1B458F", "Everton": "#3A5FCC", "Fulham": "#CC0000",
+    "Crystal Palace": "#1B458F", "Everton": "#3A5FCC", "Fulham": "#E4CCAA",
     "Ipswich": "#3A64A3", "Leicester": "#3060C0", "Liverpool": "#C8102E",
     "Luton": "#F78F1E", "Man City": "#6CABDD", "Manchester City": "#6CABDD",
     "Man United": "#DA291C", "Manchester United": "#DA291C",
-    "Newcastle": "#41B6E6", "Nottm Forest": "#DD0000", "Nottingham Forest": "#DD0000",
+    "Newcastle": "#241F20", "Nottm Forest": "#DD0000", "Nottingham Forest": "#DD0000",
     "Sheffield United": "#EE2737", "Southampton": "#D71920",
     "Tottenham": "#8AABCC", "West Ham": "#7A263A",
     "Wolves": "#FDB913", "Wolverhampton": "#FDB913",

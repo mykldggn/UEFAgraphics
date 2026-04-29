@@ -325,10 +325,34 @@ def build_xi(players: list[dict]) -> tuple[list[dict], str]:
         else:
             break
 
+    # ── FWD overcounting guard ────────────────────────────────────────────────
+    # Understat tags LW/RW as 'F M' or 'M F', so teams like Arsenal end up
+    # showing 4+ FWDs.  Keep at most 3 FWDs; demote lowest-minute hybrid
+    # FWDs (those with 'M' in their token set) to MID until ≤3 remain.
+    # A "hybrid FWD" is anyone whose tokens include both F and M.
+    def _is_hybrid_fwd(p: dict) -> bool:
+        toks = set(_tokens(p))
+        return "F" in toks and "M" in toks
+
+    for _ in range(3):
+        fwds_in_xi = [p for p in xi_out if _strict_pos(p) == "FWD"]
+        if len(fwds_in_xi) <= 3:
+            break
+        # Find lowest-minute hybrid FWD to demote
+        hybrids = [p for p in fwds_in_xi if _is_hybrid_fwd(p)]
+        if not hybrids:
+            break  # all pure strikers — nothing safe to demote
+        worst = min(hybrids, key=_total_mins)
+        # Mark as MID by injecting an override token
+        worst["_pos_override"] = "MID"
+
     # ── Count positions → formation ───────────────────────────────────────────
-    xi_def = [p for p in xi_out if _strict_pos(p) == "DEF"]
-    xi_mid = [p for p in xi_out if _strict_pos(p) == "MID"]
-    xi_fwd = [p for p in xi_out if _strict_pos(p) == "FWD"]
+    def _effective_pos(p: dict) -> str:
+        return p.get("_pos_override") or _strict_pos(p)
+
+    xi_def = [p for p in xi_out if _effective_pos(p) == "DEF"]
+    xi_mid = [p for p in xi_out if _effective_pos(p) == "MID"]
+    xi_fwd = [p for p in xi_out if _effective_pos(p) == "FWD"]
 
     n_def = len(xi_def)
     n_mid = len(xi_mid)
@@ -352,7 +376,7 @@ def build_xi(players: list[dict]) -> tuple[list[dict], str]:
         result.append({
             "player":   player.get("player", player.get("player_name", "?")),
             "minutes":  int(_total_mins(player)),
-            "position": _strict_pos(player),
+            "position": _effective_pos(player),
             "x": x, "y": y,
         })
 

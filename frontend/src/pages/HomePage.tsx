@@ -121,7 +121,12 @@ export default function HomePage() {
 
   useEffect(() => {
     if (tab === 'Team') {
-      leaguesApi.teams(leagueId, season).then(r => setTeams(r.teams)).catch(() => setTeams([]))
+      leaguesApi.teams(leagueId, season)
+        .then(r => {
+          setTeams(r.teams)
+          if (r.teams.length > 0) setSelectedTeam(r.teams[0])
+        })
+        .catch(() => setTeams([]))
     }
   }, [tab, leagueId, season])
 
@@ -232,57 +237,6 @@ export default function HomePage() {
           Data from Understat &amp; football-data.org.
         </p>
 
-        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap' }}>
-          <button
-            onClick={() => navigate('/?tab=Player')}
-            style={{
-              background: '#c9a84c',
-              color: '#06080f',
-              border: 'none',
-              borderRadius: 5,
-              padding: '9px 20px',
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-              boxShadow: '0 0 20px rgba(201,168,76,0.22)',
-              transition: 'all 0.15s',
-            }}
-          >
-            Explore Players
-          </button>
-          <button
-            onClick={() => navigate('/?tab=Team')}
-            style={{
-              background: 'transparent',
-              color: '#4d5e7a',
-              border: '1px solid #1a2235',
-              borderRadius: 5,
-              padding: '9px 20px',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-          >
-            Browse Teams
-          </button>
-          <button
-            onClick={() => navigate('/?tab=League')}
-            style={{
-              background: 'transparent',
-              color: '#4d5e7a',
-              border: '1px solid #1a2235',
-              borderRadius: 5,
-              padding: '9px 20px',
-              fontSize: 13,
-              fontWeight: 500,
-              cursor: 'pointer',
-              transition: 'all 0.15s',
-            }}
-          >
-            Leagues
-          </button>
-        </div>
 
         {/* Separator */}
         <div style={{

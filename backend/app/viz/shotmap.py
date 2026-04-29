@@ -90,9 +90,17 @@ def render(
             zorder=3,
         )
 
-    # Average distance — dashed line + diamond marker on pitch centre line only
+    # Average distance — dashed line + diamond marker + corner label
     ax_pitch.scatter(50, avg_x, s=80, color=TEXT, zorder=5, marker="D")
-    ax_pitch.plot([50, 50], [100, avg_x], color=TEXT, lw=1.5, ls="--")
+    ax_pitch.plot([50, 50], [100, avg_x], color=TEXT, lw=1.5, ls="--", alpha=0.6)
+    # Label anchored to axes coords (bottom-left corner) — always clear of shots
+    ax_pitch.text(0.03, 0.04,
+                  f"Avg dist\n{avg_dist_yd:.1f} yds",
+                  transform=ax_pitch.transAxes,
+                  fontsize=8, color=TEXT, ha="left", va="bottom",
+                  fontproperties=font, zorder=6,
+                  bbox=dict(boxstyle="round,pad=0.35", facecolor=BG,
+                            edgecolor="#4B5563", alpha=0.9, linewidth=0.7))
 
     # Stats bar (5 stats including avg distance)
     ax_stats = fig.add_axes([0, 0.15, 1, 0.06])

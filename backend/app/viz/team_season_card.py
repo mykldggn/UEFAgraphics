@@ -44,7 +44,7 @@ def render(
                 fontsize=10, fontproperties=font, color=TEXT_SUB, va="top")
 
     # ── League position over time ──────────────────────────────────────────────
-    ax_pos = fig.add_axes([0.08, 0.63, 0.88, 0.25])
+    ax_pos = fig.add_axes([0.08, 0.65, 0.88, 0.22])
     ax_pos.set_facecolor(BG)
     for sp in ax_pos.spines.values():
         sp.set_edgecolor("#374151")
@@ -123,7 +123,7 @@ def render(
         ("Pos",          sv("final_position", ".0f")),
     ]
 
-    ax_stats = fig.add_axes([0.02, 0.39, 0.96, 0.21])
+    ax_stats = fig.add_axes([0.02, 0.40, 0.96, 0.22])
     ax_stats.set_facecolor(BG); ax_stats.axis("off")
     ax_stats.set_xlim(0, 1); ax_stats.set_ylim(0, 1)
     n_cols = 6; n_rows = 2
@@ -146,7 +146,7 @@ def render(
                       ha="center", va="center")
 
     # ── Stats legend key ───────────────────────────────────────────────────────
-    ax_key = fig.add_axes([0.02, 0.37, 0.96, 0.025])
+    ax_key = fig.add_axes([0.02, 0.375, 0.96, 0.022])
     ax_key.set_facecolor(BG); ax_key.axis("off")
     ax_key.set_xlim(0, 1); ax_key.set_ylim(0, 1)
     KEY = "W Wins  ·  D Draws  ·  L Losses  ·  GF Goals For  ·  GA Goals Against  ·  " \
@@ -156,7 +156,7 @@ def render(
                 color="#4B5563", ha="center", va="center")
 
     # ── Top scorers bar ────────────────────────────────────────────────────────
-    ax_score = fig.add_axes([0.08, 0.08, 0.88, 0.27])
+    ax_score = fig.add_axes([0.08, 0.07, 0.88, 0.28])
     ax_score.set_facecolor(BG)
     for sp in ax_score.spines.values():
         sp.set_edgecolor("#374151")
