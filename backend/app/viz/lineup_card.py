@@ -26,6 +26,9 @@ Algorithm
 4.  Formation = count strict positions of the final XI.
 
 5.  Within-line ordering:
+      When FotMob hints are provided (player_last_name → column 1…N),
+      lines are sorted left-to-right by the FotMob grid column.
+      Without hints, heuristics apply:
       DEF: hybrids ('D M') → flanks; pure-D players ranked by avg_mins
            (highest = CB → centre, lowest = traditional FB → remaining flank)
       FWD: pure-F players (no M) → centre (striker)
@@ -101,7 +104,41 @@ def _avg_mins(p: dict) -> float:
 
 # ── Within-line ordering ──────────────────────────────────────────────────────
 
-def _order_def_line(players: list[dict], n_def: int) -> list[dict]:
+# ── FotMob column hints ───────────────────────────────────────────────────────
+
+def _fotmob_col(p: dict, hints: dict[str, int] | None) -> int | None:
+    """
+    Look up a player's FotMob column position (1=leftmost in row) by last name.
+    Returns None when no hint is available.
+    """
+    if not hints:
+        return None
+    name = p.get("player", p.get("player_name", ""))
+    last = name.split()[-1].lower() if name else ""
+    # Try exact last name first, then partial match
+    if last in hints:
+        return hints[last]
+    for key, val in hints.items():
+        if last and (last in key or key in last):
+            return val
+    return None
+
+
+def _order_by_fotmob(players: list[dict], hints: dict[str, int] | None) -> list[dict] | None:
+    """
+    If all players in the list have FotMob column hints, return them sorted
+    left-to-right by column.  Returns None if hints are missing for any player.
+    """
+    if not hints:
+        return None
+    cols = [_fotmob_col(p, hints) for p in players]
+    if any(c is None for c in cols):
+        return None
+    return [p for _, p in sorted(zip(cols, players))]  # type: ignore[arg-type]
+
+
+def _order_def_line(players: list[dict], n_def: int,
+                    hints: dict[str, int] | None = None) -> list[dict]:
     """
     Orders defenders left → right.
 
@@ -117,6 +154,11 @@ def _order_def_line(players: list[dict], n_def: int) -> list[dict]:
     2 hybrids: each hybrid fills one flank; CBs in centre sorted avg asc.
     No hybrids: lowest avg pair → FBs (flanks); rest → CBs (centre, avg asc).
     """
+    # FotMob grid takes priority — it knows actual positions
+    fm_ordered = _order_by_fotmob(players, hints)
+    if fm_ordered is not None:
+        return fm_ordered
+
     if n_def == 3:
         return sorted(players, key=_avg_mins, reverse=True)
 
@@ -154,7 +196,8 @@ def _order_def_line(players: list[dict], n_def: int) -> list[dict]:
     return left_flank + centre + right_flank
 
 
-def _order_fwd_line(players: list[dict]) -> list[dict]:
+def _order_fwd_line(players: list[dict],
+                    hints: dict[str, int] | None = None) -> list[dict]:
     """
     Orders forwards left → right.
 
@@ -168,6 +211,10 @@ def _order_fwd_line(players: list[dict]) -> list[dict]:
     For exactly 3 FWDs: [highest-mins, lowest-mins, second-mins]
     = [LW, CF, RW] which is a reasonable approximation.
     """
+    fm_ordered = _order_by_fotmob(players, hints)
+    if fm_ordered is not None:
+        return fm_ordered
+
     strikers = sorted([p for p in players if _is_striker(p)],
                       key=_total_mins, reverse=True)
     wingers  = sorted([p for p in players if not _is_striker(p)],
@@ -276,7 +323,8 @@ def _formation_str(n_def: int, n_mid: int, n_fwd: int) -> str:
 
 # ── Build XI ─────────────────────────────────────────────────────────────────
 
-def build_xi(players: list[dict]) -> tuple[list[dict], str]:
+def build_xi(players: list[dict],
+             fotmob_hints: dict[str, int] | None = None) -> tuple[list[dict], str]:
     """
     Returns (xi_with_coords, formation_str).
     Each result dict: player, minutes, position, x, y.
@@ -364,9 +412,10 @@ def build_xi(players: list[dict]) -> tuple[list[dict], str]:
     xi_fwd = sorted(xi_fwd, key=_total_mins, reverse=True)
 
     # ── Within-line ordering ──────────────────────────────────────────────────
-    def_ordered = _order_def_line(xi_def, n_def)
-    mid_ordered = xi_mid    # left-to-right by total mins is fine for MID
-    fwd_ordered = _order_fwd_line(xi_fwd)
+    def_ordered = _order_def_line(xi_def, n_def, fotmob_hints)
+    # MID: use FotMob column if available, else sort by total minutes
+    mid_ordered = _order_by_fotmob(xi_mid, fotmob_hints) or xi_mid
+    fwd_ordered = _order_fwd_line(xi_fwd, fotmob_hints)
 
     xi_ordered = xi_gk + def_ordered + mid_ordered + fwd_ordered
     coords     = _formation_coords(n_def, n_mid, n_fwd, mid_players=mid_ordered)
@@ -386,11 +435,12 @@ def build_xi(players: list[dict]) -> tuple[list[dict], str]:
 # ── Render ────────────────────────────────────────────────────────────────────
 
 def render(
-    team_name:    str,
-    season_label: str,
-    league_label: str,
-    players:      list[dict],
-    manager:      str = "",
+    team_name:     str,
+    season_label:  str,
+    league_label:  str,
+    players:       list[dict],
+    manager:       str = "",
+    fotmob_hints:  dict[str, int] | None = None,
 ) -> bytes:
     font    = get_font()
     primary = team_color(team_name)
@@ -398,7 +448,7 @@ def render(
     if not players:
         return _no_data_png(team_name, season_label, font)
 
-    xi, formation = build_xi(players)
+    xi, formation = build_xi(players, fotmob_hints=fotmob_hints)
     if not xi:
         return _no_data_png(team_name, season_label, font)
 

@@ -18,6 +18,7 @@ from fastapi.responses import Response
 from app.core import cache
 from app.services import football_data_service as fdorg
 from app.services import understat_service as understat
+from app.services import fotmob_service as fotmob
 from app.viz import (
     shotmap,
     radar as radar_viz,
@@ -259,7 +260,31 @@ def team_xg_timeline_img(
         logger.error(f"team xg timeline {us_team_id}/{season}: {exc}")
         raise HTTPException(503, "Failed to fetch team xG history")
 
-    png = team_xg_timeline.render(team_name, _season_label(season), history)
+    # Enrich with FotMob opponent data (best-effort)
+    opponents: list[dict] | None = None
+    try:
+        fm_team_id = fotmob.search_team(team_name)
+        if fm_team_id:
+            fixtures = fotmob.get_team_fixtures(fm_team_id)
+            if fixtures:
+                # Build a date → {name, crest_url} lookup from FotMob
+                fm_by_date: dict[str, dict] = {
+                    f["date"]: {"name": f["opponent"], "crest_url": f["opponentCrest"]}
+                    for f in fixtures
+                }
+                opponents = []
+                for h in history:
+                    date_str = str(h.get("date", ""))[:10]
+                    opp = fm_by_date.get(date_str)
+                    if opp is None:
+                        # Fall back to Understat opponent name from history
+                        opp = {"name": h.get("opponent", ""), "crest_url": ""}
+                    opponents.append(opp)
+    except Exception as exc:
+        logger.debug(f"FotMob opponent enrichment failed for {team_name}: {exc}")
+
+    png = team_xg_timeline.render(team_name, _season_label(season), history,
+                                  opponents=opponents)
     cache.img_save("infographic", ck, png)
     return _png(png)
 
@@ -271,7 +296,7 @@ def team_season_card(
     league_id: str = Query(...),
     season: int    = Query(...),
 ):
-    ck = {"type": "team_season_card", "team_id": team_id, "season": season, "v": 2}
+    ck = {"type": "team_season_card", "team_id": team_id, "season": season, "v": 3}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
@@ -377,7 +402,8 @@ def team_lineup_players(
     if not players:
         return {"players": [], "formation": ""}
 
-    xi, formation = lineup_viz.build_xi(players)
+    fotmob_hints = _fotmob_col_hints(team_name)
+    xi, formation = lineup_viz.build_xi(players, fotmob_hints=fotmob_hints)
     # Enrich with Understat player IDs for navigation
     player_pool = understat.get_league_player_stats(us_slug, season)
     id_map = {p["player"]: p["id"] for p in player_pool}
@@ -418,14 +444,16 @@ def team_lineup(
     if not players:
         raise HTTPException(503, "No player data available")
 
-    manager = fdorg.get_team_coach(team_id)
+    manager      = fdorg.get_team_coach(team_id)
+    fotmob_hints = _fotmob_col_hints(team_name)
 
     png = lineup_viz.render(
-        team_name    = team_name,
-        season_label = _season_label(season),
-        league_label = fdorg.LEAGUE_LABELS.get(league_id, league_id),
-        players      = players,
-        manager      = manager,
+        team_name     = team_name,
+        season_label  = _season_label(season),
+        league_label  = fdorg.LEAGUE_LABELS.get(league_id, league_id),
+        players       = players,
+        manager       = manager,
+        fotmob_hints  = fotmob_hints,
     )
     cache.img_save("infographic", ck, png)
     return _png(png)
@@ -434,6 +462,44 @@ def team_lineup(
 # ─────────────────────────────────────────────────────────────────────────────
 # HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
+
+def _fotmob_col_hints(team_name: str, side: str = "homeTeam") -> dict[str, int] | None:
+    """
+    Best-effort: look up the most recent FotMob lineup for a team and return
+    a dict mapping player last name (lowercase) → column position (1=left, N=right).
+    Returns None if FotMob lookup fails.
+    """
+    try:
+        fotmob_team_id = fotmob.search_team(team_name)
+        if not fotmob_team_id:
+            return None
+        fixtures = fotmob.get_team_fixtures(fotmob_team_id)
+        if not fixtures:
+            return None
+        # Take most recent finished match
+        recent = fixtures[0]
+        lineup = fotmob.get_match_lineup(recent["matchId"])
+        if not lineup:
+            return None
+        # Determine which side this team played as
+        home_name = lineup.get("homeTeam", {}).get("name", "")
+        if _team_match(team_name, home_name):
+            team_data = lineup.get("homeTeam", {})
+        else:
+            team_data = lineup.get("awayTeam", {})
+
+        hints: dict[str, int] = {}
+        for player in team_data.get("players", []):
+            name = player.get("name", "")
+            last = name.split()[-1].lower() if name else ""
+            col  = player.get("col")
+            if last and col is not None:
+                hints[last] = col
+        return hints if hints else None
+    except Exception as exc:
+        logger.debug(f"FotMob col hints failed for {team_name}: {exc}")
+        return None
+
 
 def _compute_percentiles(
     all_players: list[dict],

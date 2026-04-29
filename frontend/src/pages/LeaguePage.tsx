@@ -205,13 +205,34 @@ export default function LeaguePage() {
   const leagueName = leagueId.replace('-', ' ')
   const numInLeague = table.length || 20
 
-  // Position zone border colors — supports 18, 20-team leagues
+  // Per-league qualification zone definitions
+  // { cl: last CL pos, el: last EL pos, ecl: last ECL pos, playoff: playoff pos or null, rel: first relegation pos }
+  const ZONE_CONFIG: Record<string, { cl: number; el: number; ecl: number; playoff?: number; relCount: number }> = {
+    'ENG-1': { cl: 4, el: 5, ecl: 6,  relCount: 3 },         // PL: 4 CL, 5 EL, 6 ECL, 18-20 rel
+    'ESP-1': { cl: 4, el: 6, ecl: 7,  relCount: 3 },         // LL: 4 CL, 5-6 EL, 7 ECL, 18-20 rel
+    'DEU-1': { cl: 4, el: 5, ecl: 6,  playoff: 16, relCount: 2 }, // BL: 4 CL, 5 EL, 6 ECL, 16 playoff, 17-18 rel
+    'ITA-1': { cl: 4, el: 6, ecl: 7,  relCount: 3 },         // SA: 4 CL, 5-6 EL, 7 ECL, 18-20 rel
+    'FRA-1': { cl: 3, el: 5, ecl: 6,  playoff: 16, relCount: 2 }, // L1: 3 CL (4th to playoff), 5 EL, 6 ECL, 16 playoff, 17-18 rel
+    'NED-1': { cl: 2, el: 4, ecl: 5,  relCount: 3 },
+    'PRT-1': { cl: 3, el: 4, ecl: 5,  relCount: 2 },
+    'SCO-1': { cl: 1, el: 3, ecl: 4,  relCount: 2 },
+    'BEL-1': { cl: 1, el: 3, ecl: 4,  relCount: 2 },
+  }
+
   function posZoneColor(pos: number): string {
-    if (pos === 1) return '#c9a84c'             // Champion — gold
-    if (pos <= 4) return '#1e3a8a'              // CL — navy
-    if (pos <= 6) return '#f97316'              // EL — orange
-    if (pos <= 7) return '#84cc16'              // Conference League — lime
-    if (pos > numInLeague - 3) return '#e63946' // Relegation — red
+    const cfg = leagueId ? ZONE_CONFIG[leagueId] : null
+    const cl  = cfg?.cl  ?? 4
+    const el  = cfg?.el  ?? 6
+    const ecl = cfg?.ecl ?? 7
+    const relCount = cfg?.relCount ?? 3
+    const relStart = numInLeague - relCount + 1
+
+    if (pos === 1)                              return '#c9a84c'  // Champion — gold
+    if (pos <= cl)                              return '#1e3a8a'  // CL — navy
+    if (pos <= el)                              return '#f97316'  // EL — orange
+    if (pos <= ecl)                             return '#84cc16'  // ECL — lime
+    if (cfg?.playoff && pos === cfg.playoff)    return '#f97316'  // Relegation playoff — orange
+    if (pos >= relStart)                        return '#e63946'  // Relegation — red
     return 'transparent'
   }
 

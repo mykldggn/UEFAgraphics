@@ -45,3 +45,30 @@ app.include_router(matches.router)
 @app.get("/health")
 def health():
     return {"status": "ok"}
+
+
+@app.get("/debug/fotmob")
+def debug_fotmob():
+    """Test whether FotMob API is reachable from this server."""
+    from datetime import date
+    from app.services import fotmob_service as fotmob
+    today = date.today().isoformat().replace("-", "")
+    try:
+        raw = fotmob._get("matches", {"date": today})
+        if raw is None:
+            return {"ok": False, "error": "null response"}
+        leagues = raw.get("leagues", [])
+        total = sum(len(lg.get("matches", [])) for lg in leagues)
+        return {"ok": True, "date": today, "leagues": len(leagues), "total_matches": total}
+    except Exception as exc:
+        return {"ok": False, "error": str(exc)}
+
+
+@app.get("/debug/matches-today")
+def debug_matches_today():
+    """Test what the matches/today endpoint actually returns."""
+    from datetime import date
+    from app.routers.matches import _fdorg_matches
+    today = date.today().isoformat()
+    matches = _fdorg_matches(today)
+    return {"date": today, "count": len(matches), "matches": matches[:5]}

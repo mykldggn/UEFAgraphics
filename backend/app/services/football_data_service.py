@@ -87,6 +87,8 @@ def _get(path: str) -> dict | None:
             logger.warning("football-data.org rate limited (10 req/min)")
             return None
         resp.raise_for_status()
+        # Force UTF-8 decoding — curl_cffi sometimes misdetects encoding
+        resp.encoding = "utf-8"
         return resp.json()
     except Exception as exc:
         logger.error(f"football-data {path}: {exc}")

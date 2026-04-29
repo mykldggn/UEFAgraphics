@@ -5,6 +5,10 @@ Uses data from understat_service.get_team_xg_history().
 """
 from __future__ import annotations
 
+import io
+import logging
+from typing import Optional
+
 import matplotlib.pyplot as plt
 import matplotlib.ticker as ticker
 import numpy as np
@@ -14,6 +18,24 @@ from app.viz.common import (
     fig_to_png, get_font, team_color,
 )
 
+logger = logging.getLogger(__name__)
+
+
+def _fetch_crest(url: str) -> Optional[np.ndarray]:
+    """Download a crest PNG and return it as a numpy RGBA array (or None)."""
+    if not url:
+        return None
+    try:
+        from curl_cffi import requests as cffi_requests
+        from PIL import Image
+        resp = cffi_requests.get(url, timeout=5, impersonate="chrome")
+        resp.raise_for_status()
+        img = Image.open(io.BytesIO(resp.content)).convert("RGBA").resize((22, 22))
+        return np.array(img)
+    except Exception as exc:
+        logger.debug("crest fetch failed %s: %s", url, exc)
+        return None
+
 
 def render(
     team_name: str,
@@ -21,6 +43,9 @@ def render(
     history: list[dict],
     # Each dict: match, date, opponent, xG, xGA, cumulative_xG, cumulative_xGA,
     #            goals, goals_against
+    # Optional per-match enrichment from FotMob
+    opponents: list[dict] | None = None,
+    # opponents[i] = {"name": "Man City", "crest_url": "https://..."}
 ) -> bytes:
     font    = get_font()
     primary = team_color(team_name)
@@ -38,10 +63,29 @@ def render(
     results       = [str(h.get("result", "")).lower() for h in history]
     h_a           = [str(h.get("h_a", "")).upper() for h in history]
 
+    # Opponent enrichment — align by index
+    opp_names: list[str] = []
+    opp_crests: list[str] = []
+    if opponents and len(opponents) == len(history):
+        opp_names  = [o.get("name", "")[:3].upper() for o in opponents]
+        opp_crests = [o.get("crest_url", "") for o in opponents]
+    else:
+        opp_names  = [h.get("opponent", "")[:3].upper() for h in history]
+        opp_crests = [""] * len(history)
+
+    # Pre-fetch crest images (best-effort, non-blocking via list comprehension)
+    use_logos = any(opp_crests)
+    crest_imgs: list[Optional[np.ndarray]] = []
+    if use_logos:
+        crest_imgs = [_fetch_crest(u) for u in opp_crests]
+        use_logos  = any(img is not None for img in crest_imgs)
+
     # Per-match bar color by result
     _bar_color = {"w": "#22C55E", "d": "#F59E0B", "l": "#EF4444"}
     bar_colors = [_bar_color.get(r, GREEN) for r in results]
 
+    # Extra bottom margin when showing logos
+    bottom_margin = 0.16 if use_logos else 0.10
     fig = plt.figure(figsize=(12, 9), facecolor=BG)
 
     # ── Title ──────────────────────────────────────────────────────────────────
@@ -67,10 +111,9 @@ def render(
                         where=np.array(cum_xg) < np.array(cum_xga),
                         alpha=0.12, color=RED, interpolate=True)
 
-    # Plot actual goals as scatter
-    ax_cum.scatter(xs, np.cumsum(goals),         s=30, color=GREEN, zorder=5,
+    ax_cum.scatter(xs, np.cumsum(goals),        s=30, color=GREEN, zorder=5,
                    alpha=0.7, label="Actual Goals")
-    ax_cum.scatter(xs, np.cumsum(goals_against),  s=30, color=RED,   zorder=5,
+    ax_cum.scatter(xs, np.cumsum(goals_against), s=30, color=RED,   zorder=5,
                    alpha=0.7, marker="v", label="Goals Conceded")
 
     ax_cum.tick_params(colors=TEXT_SUB, labelsize=8)
@@ -81,13 +124,12 @@ def render(
     ax_cum.set_xlim(0.5, max(matches) + 0.5)
 
     # ── Bottom panel: per-match xG bars ────────────────────────────────────────
-    ax_bar = fig.add_axes([0.08, 0.10, 0.88, 0.36])
+    ax_bar = fig.add_axes([0.08, bottom_margin, 0.88, 0.36])
     ax_bar.set_facecolor(BG)
     for sp in ax_bar.spines.values():
         sp.set_edgecolor("#374151")
 
     bar_w = 0.38
-    # Color each xG For bar by match result (W=green, D=amber, L=red)
     for i, (xi, xg_v, col) in enumerate(zip(xs, xg_per, bar_colors)):
         ax_bar.bar(xi - bar_w / 2, xg_v, width=bar_w, color=col, alpha=0.85, zorder=3,
                    label="xG For" if i == 0 else "")
@@ -101,19 +143,26 @@ def render(
         ax_bar.text(xs[i] + bar_w / 2, xga_per[i] + 0.04, str(ga),
                     ha="center", fontsize=6, color=TEXT_SUB, fontproperties=font)
 
-    # X-axis: show H/A every match; limit to every 2nd on long seasons
-    n = len(matches)
+    # X-axis labels — show opponent abbrev + H/A every match (or every 2nd on long seasons)
+    n    = len(matches)
     step = 1 if n <= 20 else 2
     tick_idx = list(range(0, n, step))
     ax_bar.set_xticks([xs[i] for i in tick_idx])
-    ax_bar.set_xticklabels(
-        [h_a[i] if i < len(h_a) else "" for i in tick_idx],
-        fontsize=7, color=TEXT_SUB,
-    )
-    ax_bar.tick_params(colors=TEXT_SUB, labelsize=8, length=0)
+
+    if opp_names:
+        labels = [
+            f"{h_a[i]}\n{opp_names[i]}" if i < len(opp_names) else h_a[i]
+            for i in tick_idx
+        ]
+    else:
+        labels = [h_a[i] if i < len(h_a) else "" for i in tick_idx]
+
+    ax_bar.set_xticklabels(labels, fontsize=6.5, color=TEXT_SUB,
+                           fontproperties=font, linespacing=1.4)
+    ax_bar.tick_params(colors=TEXT_SUB, labelsize=7, length=0)
     ax_bar.set_ylabel("Per Match", color=TEXT_SUB, fontsize=9, fontproperties=font)
 
-    # Custom legend: W/D/L result colors + xGA
+    # Custom legend
     from matplotlib.patches import Patch
     legend_els = [
         Patch(facecolor="#22C55E", alpha=0.85, label="W · xG For"),
@@ -126,14 +175,34 @@ def render(
     ax_bar.grid(axis="y", color="#1F2937", lw=0.6)
     ax_bar.set_xlim(0.5, max(matches) + 0.5)
 
-    # ── Season summary pills ───────────────────────────────────────────────────
+    # ── Opponent crest logos below x-axis ──────────────────────────────────────
+    if use_logos and crest_imgs:
+        from matplotlib.offsetbox import OffsetImage, AnnotationBbox
+        for i, img_arr in enumerate(crest_imgs):
+            if img_arr is None or i not in tick_idx:
+                continue
+            oi = OffsetImage(img_arr, zoom=0.55)
+            oi.image.axes = ax_bar
+            ab = AnnotationBbox(
+                oi,
+                (xs[i], 0),
+                xybox=(0, -22),
+                xycoords=("data", "axes fraction"),
+                boxcoords="offset points",
+                frameon=False,
+                pad=0,
+            )
+            ax_bar.add_artist(ab)
+
+    # ── Season summary footer ──────────────────────────────────────────────────
     total_xg  = cum_xg[-1]
     total_xga = cum_xga[-1]
     total_g   = sum(goals)
     total_ga  = sum(goals_against)
 
-    fig.text(0.5, 0.025,
-             f"xG: {total_xg:.1f}   xGA: {total_xga:.1f}   Goals: {total_g}   Goals Against: {total_ga}"
+    fig.text(0.5, 0.015,
+             f"xG: {total_xg:.1f}   xGA: {total_xga:.1f}   "
+             f"Goals: {total_g}   Goals Against: {total_ga}"
              f"   Data: Understat  ·  UEFAgraphics",
              fontsize=8, color="#374151", ha="center", va="bottom", fontproperties=font)
 
