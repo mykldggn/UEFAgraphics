@@ -594,6 +594,9 @@ def team_lineup_players(
     us_slug = understat.LEAGUE_TO_US.get(league_id)
     fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id)
 
+    # Get FotMob lineup data (formation + column hints) — used by both paths
+    fm_hints, fm_formation = _fotmob_lineup_data(team_name)
+
     if us_slug:
         us_teams = understat.get_league_teams(us_slug, season)
         us_team  = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
@@ -601,8 +604,8 @@ def team_lineup_players(
         players  = understat.get_most_played_xi(us_slug, season, us_name)
         if not players:
             return {"players": [], "formation": ""}
-        fotmob_hints = _fotmob_col_hints(team_name)
-        xi, formation = lineup_viz.build_xi(players, fotmob_hints=fotmob_hints)
+        xi, formation = lineup_viz.build_xi(players, fotmob_hints=fm_hints,
+                                            forced_formation=fm_formation)
         player_pool   = understat.get_league_player_stats(us_slug, season)
         id_map = {p["player"]: p["id"] for p in player_pool}
         return {
@@ -624,8 +627,8 @@ def team_lineup_players(
             )[:15]
             if not team_pl:
                 return {"players": [], "formation": ""}
-            fotmob_hints = _fotmob_col_hints(team_name)
-            xi, formation = lineup_viz.build_xi(team_pl, fotmob_hints=fotmob_hints)
+            xi, formation = lineup_viz.build_xi(team_pl, fotmob_hints=fm_hints,
+                                                forced_formation=fm_formation)
             return {
                 "players": [
                     {"player": p["player"], "position": p["position"],
@@ -648,7 +651,7 @@ def team_lineup(
     league_id: str = Query(...),
     season:    int = Query(...),
 ):
-    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 12}
+    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 13}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
@@ -677,16 +680,18 @@ def team_lineup(
         png = lineup_viz._no_data_png(team_name, "Lineup data unavailable", get_font())
         return _png(png)
 
-    manager      = fdorg.get_team_coach(team_id) if team_id.isdigit() else ""
-    fotmob_hints = _fotmob_col_hints(team_name)
+    # FotMob lineup: formation string (e.g. "4-3-3") + column hints
+    fm_hints, fm_formation = _fotmob_lineup_data(team_name)
+    manager = fdorg.get_team_coach(team_id) if team_id.isdigit() else ""
 
     png = lineup_viz.render(
-        team_name    = team_name,
-        season_label = _season_label(season),
-        league_label = fdorg.LEAGUE_LABELS.get(league_id, league_id),
-        players      = players,
-        manager      = manager,
-        fotmob_hints = fotmob_hints,
+        team_name        = team_name,
+        season_label     = _season_label(season),
+        league_label     = fdorg.LEAGUE_LABELS.get(league_id, league_id),
+        players          = players,
+        manager          = manager,
+        fotmob_hints     = fm_hints,
+        forced_formation = fm_formation,
     )
     cache.img_save("infographic", ck, png)
     return _png(png)
@@ -696,30 +701,36 @@ def team_lineup(
 # HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
-def _fotmob_col_hints(team_name: str, side: str = "homeTeam") -> dict[str, int] | None:
+def _fotmob_lineup_data(
+    team_name: str,
+) -> tuple[dict[str, int] | None, str | None]:
     """
-    Best-effort: look up the most recent FotMob lineup for a team and return
-    a dict mapping player last name (lowercase) → column position (1=left, N=right).
-    Returns None if FotMob lookup fails.
+    Fetch the most recent FotMob match lineup for a team.
+    Returns (col_hints, formation_str).
+    col_hints maps last-name (lowercase) → column index (1=leftmost in row).
+    formation_str is e.g. "4-3-3", "4-2-3-1".
+    Both values may be None on failure.
     """
     try:
         fotmob_team_id = fotmob.search_team(team_name)
         if not fotmob_team_id:
-            return None
+            return None, None
         fixtures = fotmob.get_team_fixtures(fotmob_team_id)
         if not fixtures:
-            return None
+            return None, None
         # Take most recent finished match
-        recent = fixtures[0]
-        lineup = fotmob.get_match_lineup(recent["matchId"])
+        recent  = fixtures[0]
+        lineup  = fotmob.get_match_lineup(recent["matchId"])
         if not lineup:
-            return None
+            return None, None
         # Determine which side this team played as
         home_name = lineup.get("homeTeam", {}).get("name", "")
         if _team_match(team_name, home_name):
             team_data = lineup.get("homeTeam", {})
         else:
             team_data = lineup.get("awayTeam", {})
+
+        formation = team_data.get("formation") or None  # e.g. "4-3-3"
 
         hints: dict[str, int] = {}
         for player in team_data.get("players", []):
@@ -728,10 +739,16 @@ def _fotmob_col_hints(team_name: str, side: str = "homeTeam") -> dict[str, int] 
             col  = player.get("col")
             if last and col is not None:
                 hints[last] = col
-        return hints if hints else None
+        return (hints if hints else None), formation
     except Exception as exc:
-        logger.debug(f"FotMob col hints failed for {team_name}: {exc}")
-        return None
+        logger.debug(f"FotMob lineup data failed for {team_name}: {exc}")
+        return None, None
+
+
+def _fotmob_col_hints(team_name: str) -> dict[str, int] | None:
+    """Convenience wrapper — returns just the column hints (backwards-compat)."""
+    hints, _ = _fotmob_lineup_data(team_name)
+    return hints
 
 
 def _compute_percentiles(

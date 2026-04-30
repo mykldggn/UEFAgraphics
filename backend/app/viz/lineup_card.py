@@ -323,11 +323,45 @@ def _formation_str(n_def: int, n_mid: int, n_fwd: int) -> str:
 
 # ── Build XI ─────────────────────────────────────────────────────────────────
 
-def build_xi(players: list[dict],
-             fotmob_hints: dict[str, int] | None = None) -> tuple[list[dict], str]:
+def _parse_formation(formation_str: str) -> tuple[int, int, int] | None:
+    """
+    Parse a formation string into (n_def, n_mid, n_fwd).
+    "4-3-3"   → (4, 3, 3)
+    "4-2-3-1" → (4, 5, 1)   — middle layers summed
+    "3-5-2"   → (3, 5, 2)
+    Returns None if parsing fails or total ≠ 10.
+    """
+    try:
+        parts = [int(x) for x in str(formation_str).split("-") if x.strip().isdigit()]
+    except (ValueError, AttributeError):
+        return None
+    if len(parts) < 2:
+        return None
+    n_def = parts[0]
+    n_fwd = parts[-1]
+    n_mid = sum(parts[1:-1]) if len(parts) > 2 else parts[1]
+    if n_def + n_mid + n_fwd != 10:
+        return None
+    return n_def, n_mid, n_fwd
+
+
+def build_xi(
+    players: list[dict],
+    fotmob_hints: dict[str, int] | None = None,
+    forced_formation: str | None = None,
+) -> tuple[list[dict], str]:
     """
     Returns (xi_with_coords, formation_str).
     Each result dict: player, minutes, position, x, y.
+
+    When forced_formation is provided (e.g. "4-3-3" from a FotMob lineup),
+    that formation is treated as ground truth.  Players are selected:
+      1. GK  — highest-minute goalkeeper
+      2. DEF — top n_def defenders by minutes
+      3. FWD — top n_fwd forwards by minutes
+      4. MID — top n_mid from all remaining outfield players
+    This fills "attacking midfielders" (FWD-classified "F M") naturally into
+    the midfield for 4-2-3-1 / 4-3-3 etc. without any heuristic guards.
     """
     MIN_AVG = 45   # exclude pure super-subs
 
@@ -346,38 +380,83 @@ def build_xi(players: list[dict],
         xi_gk    = out_pool[:1]
         out_pool = out_pool[1:]
 
-    # ── Take top 10 outfield by total minutes ─────────────────────────────────
+    # ── Forced-formation path (FotMob lineup tells us the real shape) ─────────
+    parsed = _parse_formation(forced_formation) if forced_formation else None
+    if parsed:
+        n_def_t, n_mid_t, n_fwd_t = parsed
+
+        def_pool = sorted([p for p in out_pool if _strict_pos(p) == "DEF"],
+                          key=_total_mins, reverse=True)
+        fwd_pool = sorted([p for p in out_pool if _strict_pos(p) == "FWD"],
+                          key=_total_mins, reverse=True)
+
+        xi_def = def_pool[:n_def_t]
+        xi_fwd = fwd_pool[:n_fwd_t]
+
+        # MID = highest-minute players not already claimed
+        used = {id(p) for p in xi_def + xi_fwd}
+        remaining = [p for p in out_pool if id(p) not in used]
+        xi_mid = remaining[:n_mid_t]
+
+        # If any group is short, pull from leftover pool to fill
+        used2 = {id(p) for p in xi_def + xi_mid + xi_fwd}
+        leftover = [p for p in out_pool if id(p) not in used2]
+        for target, group in [(n_def_t, xi_def), (n_fwd_t, xi_fwd), (n_mid_t, xi_mid)]:
+            while len(group) < target and leftover:
+                group.append(leftover.pop(0))
+                leftover = [p for p in out_pool
+                            if id(p) not in {id(q) for q in xi_def + xi_mid + xi_fwd}]
+
+        n_def, n_mid, n_fwd = len(xi_def), len(xi_mid), len(xi_fwd)
+
+        # Assign effective positions so downstream rendering is consistent
+        for p in xi_def: p["_pos_override"] = "DEF"
+        for p in xi_mid: p["_pos_override"] = "MID"
+        for p in xi_fwd: p["_pos_override"] = "FWD"
+
+        xi_def = sorted(xi_def, key=_total_mins, reverse=True)
+        xi_mid = sorted(xi_mid, key=_total_mins, reverse=True)
+        xi_fwd = sorted(xi_fwd, key=_total_mins, reverse=True)
+
+        def_ordered = _order_def_line(xi_def, n_def, fotmob_hints)
+        mid_ordered = _order_by_fotmob(xi_mid, fotmob_hints) or xi_mid
+        fwd_ordered = _order_fwd_line(xi_fwd, fotmob_hints)
+
+        xi_ordered = xi_gk + def_ordered + mid_ordered + fwd_ordered
+        coords     = _formation_coords(n_def, n_mid, n_fwd, mid_players=mid_ordered)
+
+        result = []
+        for player, (x, y) in zip(xi_ordered, coords):
+            result.append({
+                "player":   player.get("player", player.get("player_name", "?")),
+                "minutes":  int(_total_mins(player)),
+                "position": player.get("_pos_override") or _strict_pos(player),
+                "x": x, "y": y,
+            })
+        return result, _formation_str(n_def, n_mid, n_fwd)
+
+    # ── Fallback: heuristic path (Understat / no formation hint) ─────────────
+    # Take top 10 outfield by total minutes
     xi_out = list(out_pool[:10])
 
-    # ── 5ATB guard: swap excess DEF with next-best non-DEF ───────────────────
-    # Only keep >4 DEFs when ≥2 of them are hybrids (genuine wing-back system).
-    # For normal 4ATB teams (e.g. Newcastle) where Understat happens to
-    # classify 5 DEF players, remove the lowest-minute pure DEF and replace
-    # it with the next-best outfield player who is NOT a DEF.
-    for _ in range(2):    # at most 2 passes to handle edge cases
+    # 5ATB guard: only keep >4 DEFs when ≥2 are hybrids (genuine wing-back)
+    for _ in range(2):
         defs_in_xi   = [p for p in xi_out if _strict_pos(p) == "DEF"]
         n_hyb_in_xi  = sum(1 for p in defs_in_xi if _is_hybrid_def(p))
         if len(defs_in_xi) > 4 and n_hyb_in_xi < 2:
-            # Remove the lowest-minute DEF from XI
-            worst_def = min(defs_in_xi, key=_total_mins)
+            worst_def  = min(defs_in_xi, key=_total_mins)
             xi_out.remove(worst_def)
-            # Replace with the best available non-DEF not already in XI
             xi_ids     = {id(p) for p in xi_out}
             candidates = [p for p in out_pool
-                          if id(p) not in xi_ids
-                          and _strict_pos(p) != "DEF"]
-            if not candidates:  # fall back: any player not in XI
+                          if id(p) not in xi_ids and _strict_pos(p) != "DEF"]
+            if not candidates:
                 candidates = [p for p in out_pool if id(p) not in xi_ids]
             if candidates:
                 xi_out.append(max(candidates, key=_total_mins))
         else:
             break
 
-    # ── FWD overcounting guard ────────────────────────────────────────────────
-    # Understat tags LW/RW as 'F M' or 'M F', so teams like Arsenal end up
-    # showing 4+ FWDs.  Keep at most 3 FWDs; demote lowest-minute hybrid
-    # FWDs (those with 'M' in their token set) to MID until ≤3 remain.
-    # A "hybrid FWD" is anyone whose tokens include both F and M.
+    # FWD overcounting guard: demote lowest-minute hybrid FWDs to MID
     def _is_hybrid_fwd(p: dict) -> bool:
         toks = set(_tokens(p))
         return "F" in toks and "M" in toks
@@ -386,34 +465,21 @@ def build_xi(players: list[dict],
         fwds_in_xi = [p for p in xi_out if _strict_pos(p) == "FWD"]
         if len(fwds_in_xi) <= 3:
             break
-        # Find lowest-minute hybrid FWD to demote
         hybrids = [p for p in fwds_in_xi if _is_hybrid_fwd(p)]
         if not hybrids:
-            break  # all pure strikers — nothing safe to demote
-        worst = min(hybrids, key=_total_mins)
-        # Mark as MID by injecting an override token
-        worst["_pos_override"] = "MID"
+            break
+        min(hybrids, key=_total_mins)["_pos_override"] = "MID"
 
-    # ── Count positions → formation ───────────────────────────────────────────
     def _effective_pos(p: dict) -> str:
         return p.get("_pos_override") or _strict_pos(p)
 
-    xi_def = [p for p in xi_out if _effective_pos(p) == "DEF"]
-    xi_mid = [p for p in xi_out if _effective_pos(p) == "MID"]
-    xi_fwd = [p for p in xi_out if _effective_pos(p) == "FWD"]
+    xi_def = sorted([p for p in xi_out if _effective_pos(p) == "DEF"], key=_total_mins, reverse=True)
+    xi_mid = sorted([p for p in xi_out if _effective_pos(p) == "MID"], key=_total_mins, reverse=True)
+    xi_fwd = sorted([p for p in xi_out if _effective_pos(p) == "FWD"], key=_total_mins, reverse=True)
 
-    n_def = len(xi_def)
-    n_mid = len(xi_mid)
-    n_fwd = len(xi_fwd)
+    n_def, n_mid, n_fwd = len(xi_def), len(xi_mid), len(xi_fwd)
 
-    # Sort each group by total minutes desc for within-line ordering inputs
-    xi_def = sorted(xi_def, key=_total_mins, reverse=True)
-    xi_mid = sorted(xi_mid, key=_total_mins, reverse=True)
-    xi_fwd = sorted(xi_fwd, key=_total_mins, reverse=True)
-
-    # ── Within-line ordering ──────────────────────────────────────────────────
     def_ordered = _order_def_line(xi_def, n_def, fotmob_hints)
-    # MID: use FotMob column if available, else sort by total minutes
     mid_ordered = _order_by_fotmob(xi_mid, fotmob_hints) or xi_mid
     fwd_ordered = _order_fwd_line(xi_fwd, fotmob_hints)
 
@@ -428,19 +494,19 @@ def build_xi(players: list[dict],
             "position": _effective_pos(player),
             "x": x, "y": y,
         })
-
     return result, _formation_str(n_def, n_mid, n_fwd)
 
 
 # ── Render ────────────────────────────────────────────────────────────────────
 
 def render(
-    team_name:     str,
-    season_label:  str,
-    league_label:  str,
-    players:       list[dict],
-    manager:       str = "",
-    fotmob_hints:  dict[str, int] | None = None,
+    team_name:        str,
+    season_label:     str,
+    league_label:     str,
+    players:          list[dict],
+    manager:          str = "",
+    fotmob_hints:     dict[str, int] | None = None,
+    forced_formation: str | None = None,
 ) -> bytes:
     font    = get_font()
     primary = team_color(team_name)
@@ -448,7 +514,8 @@ def render(
     if not players:
         return _no_data_png(team_name, season_label, font)
 
-    xi, formation = build_xi(players, fotmob_hints=fotmob_hints)
+    xi, formation = build_xi(players, fotmob_hints=fotmob_hints,
+                             forced_formation=forced_formation)
     if not xi:
         return _no_data_png(team_name, season_label, font)
 
