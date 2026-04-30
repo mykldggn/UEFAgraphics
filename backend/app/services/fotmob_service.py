@@ -33,7 +33,7 @@ FOTMOB_LEAGUES: dict[str, int] = {
     "ENG-2":  48,   # Championship
     "ENG-3":  49,   # League One
     "NED-1":  57,   # Eredivisie
-    "POR-1":  61,   # Primeira Liga
+    "PRT-1":  61,   # Primeira Liga
     "SCO-1":  58,   # Scottish Premiership
     "BEL-1":  59,   # Pro League
     "TUR-1":  71,   # Süper Lig
@@ -42,6 +42,55 @@ FOTMOB_LEAGUES: dict[str, int] = {
     "UEFA-EL": 73,  # Europa League
     "UEFA-ECL": 10478,  # Conference League
 }
+
+
+# FotMob position string → Understat-style token(s) (for lineup classification)
+_FOTMOB_POS_TOKEN: dict[str, str] = {
+    "goalkeeper":            "GK",
+    "centre-back":           "D",
+    "central defender":      "D",
+    "defender":              "D",
+    "right back":            "D M",
+    "left back":             "D M",
+    "full back":             "D M",
+    "fullback":              "D M",
+    "wing back":             "D M",
+    "right wing back":       "D M",
+    "left wing back":        "D M",
+    "wing-back":             "D M",
+    "right wing-back":       "D M",
+    "left wing-back":        "D M",
+    "defensive midfielder":  "M D",
+    "defensive midfield":    "M D",
+    "holding midfielder":    "M D",
+    "central midfielder":    "M",
+    "midfielder":            "M",
+    "right midfield":        "M",
+    "left midfield":         "M",
+    "right midfielder":      "M",
+    "left midfielder":       "M",
+    "box-to-box midfielder": "M",
+    "attacking midfielder":  "F M",
+    "attacking midfield":    "F M",
+    "second striker":        "F M",
+    "right winger":          "F M",
+    "left winger":           "F M",
+    "winger":                "F M",
+    "right wing":            "F M",
+    "left wing":             "F M",
+    "striker":               "F",
+    "centre-forward":        "F",
+    "center-forward":        "F",
+    "centre forward":        "F",
+    "center forward":        "F",
+    "forward":               "F",
+    "attacker":              "F",
+}
+
+
+def fotmob_pos_to_token(pos_str: str) -> str:
+    """Map FotMob position string to Understat-style token(s). Defaults to 'M'."""
+    return _FOTMOB_POS_TOKEN.get(pos_str.lower().strip(), "M")
 
 
 _session: cffi_requests.Session | None = None
@@ -394,7 +443,7 @@ def get_league_player_stats(fm_league_id: int, season_year: int | None = None) -
              xg_p90, xa_p90, dribbles, dribbles_p90.
     Missing Understat-only cols (npxg, xgchain, xgbuildup) are set to 0.
     """
-    ck = {"fm_league": fm_league_id, "season": season_year or "current", "v": 3}
+    ck = {"fm_league": fm_league_id, "season": season_year or "current", "v": 4}
     cached = cache.json_get("fotmob_league_player_stats_v2", ck, ttl_hours=6)
     if cached is not None:
         return cached
@@ -412,39 +461,72 @@ def get_league_player_stats(fm_league_id: int, season_year: int | None = None) -
         except (TypeError, ValueError):
             return 0.0
 
+    # Map group statKey/header → our column (for statValue extraction fallback)
+    _GRP_KEY_MAP: dict[str, str | None] = {
+        "goals": "goals", "topgoals": "goals", "goal": "goals",
+        "assists": "assists", "topassists": "assists", "assist": "assists",
+        "shots": "shots", "topshots": "shots",
+        "keypasses": "key_passes", "keypass": "key_passes", "topkeypasses": "key_passes",
+        "xg": "xg", "expectedgoals": "xg", "topxg": "xg",
+        "xa": "xa", "expectedassists": "xa",
+        "dribbles": "dribbles", "successfuldribbles": "dribbles",
+        "minutesplayed": "minutes", "appearances": "apps",
+        "rating": None, "toprating": None,
+    }
+
+    _KEY_MAP = {
+        "goals": "goals", "assists": "assists", "shots": "shots",
+        "keyPasses": "key_passes", "keypasses": "key_passes", "key_passes": "key_passes",
+        "xg": "xg", "expectedGoals": "xg", "xGoal": "xg",
+        "xa": "xa", "expectedAssists": "xa",
+        "successfulDribbles": "dribbles", "dribbles": "dribbles",
+        "minutesPlayed": "minutes", "minutes": "minutes",
+        "matchesPlayed": "apps", "appearances": "apps", "apps": "apps",
+    }
+
     for grp in raw.get("stats", {}).get("players", []):
+        # Determine which stat this group represents (for statValue fallback)
+        grp_key = str(grp.get("statKey") or grp.get("header") or "").lower()
+        grp_key_norm = grp_key.replace(" ", "").replace("_", "").replace("-", "")
+        dest_from_grp: str | None = _GRP_KEY_MAP.get(grp_key_norm)
+
         for entry in grp.get("statsData", []):
             pid = entry.get("participantId")
             if not pid:
                 continue
             if pid not in pool:
+                pos_raw = entry.get("position") or entry.get("pos") or ""
                 pool[pid] = {
                     "id":           str(pid),
                     "player":       entry.get("name", ""),
                     "team":         entry.get("teamName", ""),
                     "teamId":       entry.get("teamId"),
+                    "position":     fotmob_pos_to_token(pos_raw),
                     "goals":        0.0, "assists":    0.0, "shots":      0.0,
                     "key_passes":   0.0, "xg":         0.0, "xa":         0.0,
                     "dribbles":     0.0, "minutes":    0.0, "apps":       0.0,
                 }
             p = pool[pid]
+            # Update position if we get a non-empty value
+            pos_raw = entry.get("position") or entry.get("pos") or ""
+            if pos_raw and p["position"] == "M":  # only override the default
+                p["position"] = fotmob_pos_to_token(pos_raw)
+
             # Collect every numeric field, keeping the maximum observed value
-            _KEY_MAP = {
-                "goals": "goals", "assists": "assists", "shots": "shots",
-                "keyPasses": "key_passes", "keypasses": "key_passes",
-                "key_passes": "key_passes",
-                "xg": "xg", "expectedGoals": "xg",
-                "xa": "xa", "expectedAssists": "xa",
-                "successfulDribbles": "dribbles", "dribbles": "dribbles",
-                "minutesPlayed": "minutes", "minutes": "minutes",
-                "matchesPlayed": "apps", "appearances": "apps",
-            }
             for raw_key, our_key in _KEY_MAP.items():
                 val = entry.get(raw_key)
                 if val is not None:
                     fv = _safe_float(val)
                     if fv > p[our_key]:
                         p[our_key] = fv
+
+            # statValue fallback: use group's statKey to identify what it represents
+            if dest_from_grp:
+                sv = entry.get("statValue") or entry.get("value")
+                if sv is not None:
+                    fv = _safe_float(sv)
+                    if fv > p[dest_from_grp]:
+                        p[dest_from_grp] = fv
 
     # Build final list with per-90 stats
     result: list[dict] = []
@@ -883,6 +965,127 @@ def get_league_position_history(
 
 
 # ── Player search ──────────────────────────────────────────────────────────────
+
+def resolve_fotmob_team_id(
+    team_name: str,
+    fm_league_id: int,
+    season_year: int | None = None,
+) -> int | None:
+    """
+    Find the FotMob integer team ID for a named team by scanning the league's
+    allMatches data.  Falls back to FotMob team search if not found.
+    """
+    raw = _get_league_raw(fm_league_id, season_year)
+    all_matches = (raw.get("matches") or {}).get("allMatches", [])
+
+    name_lo = team_name.lower().strip()
+    # Build name → id from match participants
+    for m in all_matches:
+        for side in ("home", "away"):
+            t = m.get(side) or {}
+            t_name = (t.get("longName") or t.get("name") or "").lower().strip()
+            t_id = t.get("id")
+            if t_id and (name_lo in t_name or t_name in name_lo):
+                return int(t_id)
+
+    # Also try the table section
+    table_entries = _extract_fotmob_table_entries(raw)
+    for entry in table_entries:
+        e_name = (entry.get("name") or entry.get("shortName") or "").lower().strip()
+        if e_name and (name_lo in e_name or e_name in name_lo):
+            tid = entry.get("id") or entry.get("teamId") or ""
+            if isinstance(tid, str) and tid.startswith("team-"):
+                tid = tid.split("-")[-1]
+            try:
+                return int(tid)
+            except (ValueError, TypeError):
+                pass
+
+    return search_team(team_name)
+
+
+def _extract_fotmob_table_entries(raw: dict) -> list[dict]:
+    """
+    Extract the standings table rows from a FotMob leagues raw response.
+    Handles multiple known response shapes.
+    """
+    table_root = raw.get("table") or []
+
+    # Shape 1: table = [{"data": {"table": {"all": [...]}}}]
+    if isinstance(table_root, list):
+        for section in table_root:
+            if isinstance(section, dict):
+                entries = (section.get("data") or {}).get("table", {}).get("all", [])
+                if entries:
+                    return entries
+        # Shape 2: table = [{"all": [...]}]
+        for section in table_root:
+            if isinstance(section, dict):
+                entries = section.get("all", [])
+                if entries:
+                    return entries
+
+    # Shape 3: table = {"all": [...]}
+    if isinstance(table_root, dict):
+        entries = table_root.get("all", [])
+        if entries:
+            return entries
+
+    return []
+
+
+def get_league_table(fm_league_id: int, season_year: int | None = None) -> list[dict]:
+    """
+    Build a standings table from FotMob league raw data.
+    Returns list of dicts: rank, team, team_id, played, wins, draws, losses,
+                           goals_for, goals_against, goal_diff, points.
+    team_id is the FotMob integer team ID (as string).
+    """
+    ck = {"fm_league": fm_league_id, "season": season_year or "current", "v": 1}
+    cached = cache.json_get("fotmob_league_table", ck, ttl_hours=2)
+    if cached is not None:
+        return cached
+
+    raw = _get_league_raw(fm_league_id, season_year)
+    if not raw:
+        return []
+
+    entries = _extract_fotmob_table_entries(raw)
+    if not entries:
+        return []
+
+    result: list[dict] = []
+    for i, entry in enumerate(entries):
+        name = entry.get("name") or entry.get("shortName") or ""
+        tid  = entry.get("id") or entry.get("teamId") or ""
+        if isinstance(tid, str) and tid.startswith("team-"):
+            tid = tid.split("-")[-1]
+
+        scores = entry.get("scoresStr", "0:0") or "0:0"
+        try:
+            gf, ga = map(int, str(scores).split(":"))
+        except (ValueError, TypeError):
+            gf, ga = 0, 0
+
+        rank = int(entry.get("idx", i + 1) or (i + 1))
+        result.append({
+            "rank":          rank,
+            "team":          name,
+            "team_id":       str(tid),
+            "played":        int(entry.get("played", 0) or 0),
+            "wins":          int(entry.get("wins", 0) or 0),
+            "draws":         int(entry.get("draws", 0) or 0),
+            "losses":        int(entry.get("losses", 0) or 0),
+            "goals_for":     gf,
+            "goals_against": ga,
+            "goal_diff":     gf - ga,
+            "points":        int(entry.get("pts", 0) or 0),
+        })
+
+    result.sort(key=lambda r: r["rank"])
+    cache.json_save("fotmob_league_table", ck, result)
+    return result
+
 
 def search_players_fotmob(name: str, fm_league_id: int | None = None) -> list[dict]:
     """

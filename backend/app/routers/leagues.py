@@ -31,13 +31,18 @@ def get_teams(league_id: str, season: int = Query(...)):
     if league_id not in fdorg.LEAGUE_LABELS:
         raise HTTPException(404, f"Unknown league: {league_id}")
 
-    # Try football-data.org first; fall back to Understat team list
+    # Try football-data.org first; fall back to Understat, then FotMob
     teams = fdorg.get_teams(league_id, season)
     if not teams:
         us_slug = understat.LEAGUE_TO_US.get(league_id)
         if us_slug:
             us_teams = understat.get_league_teams(us_slug, season)
             teams = [{"id": t["id"], "name": t["name"]} for t in us_teams]
+    if not teams:
+        fm_id = fotmob.FOTMOB_LEAGUES.get(league_id)
+        if fm_id:
+            fm_table = fotmob.get_league_table(fm_id, season)
+            teams = [{"id": row["team_id"], "name": row["team"]} for row in fm_table]
 
     return {"league": league_id, "season": season, "teams": teams}
 
@@ -123,6 +128,11 @@ def league_table(league_id: str, season: int = Query(...)):
                     }
                     for i, t in enumerate(sorted_teams)
                 ]
+
+    if not table:
+        fm_id = fotmob.FOTMOB_LEAGUES.get(league_id)
+        if fm_id:
+            table = fotmob.get_league_table(fm_id, season)
 
     if not table:
         raise HTTPException(503, "League table unavailable for this season")
@@ -234,6 +244,11 @@ def get_team_colors(league_id: str, season: int = Query(default=2024)):
     else:
         fdorg_teams = fdorg.get_teams(league_id, season)
         teams = [t["name"] for t in fdorg_teams]
+    if not teams:
+        fm_id = fotmob.FOTMOB_LEAGUES.get(league_id)
+        if fm_id:
+            fm_table = fotmob.get_league_table(fm_id, season)
+            teams = [row["team"] for row in fm_table]
     return {t: team_color(t) for t in teams}
 
 

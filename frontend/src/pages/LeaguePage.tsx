@@ -558,19 +558,77 @@ export default function LeaguePage() {
                     tick={{ fill: '#4d5e7a', fontSize: 10 }}
                     label={{ value: 'Position', angle: -90, position: 'insideLeft', fill: '#4d5e7a', fontSize: 10 }} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#0c1321', border: '1px solid #1a2235', borderRadius: 8, fontSize: 11 }}
-                    itemStyle={{ color: '#4d5e7a' }}
-                    formatter={(val, name) => [`${val}`, name]}
-                    itemSorter={item => Number(item.value)}
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null
+                      // Sort all entries by position value ascending
+                      const sorted = [...payload]
+                        .filter(p => p.value != null)
+                        .sort((a, b) => Number(a.value) - Number(b.value))
+                      // Show: focused team always, otherwise top 5 + bottom 3
+                      const focused = focusTeam
+                        ? sorted.filter(p => p.dataKey === focusTeam)
+                        : []
+                      const top5   = sorted.slice(0, 5)
+                      const bottom3 = sorted.slice(-3)
+                      const shown  = focusTeam
+                        ? focused
+                        : [...top5, ...bottom3].filter((p, i, arr) =>
+                            arr.findIndex(x => x.dataKey === p.dataKey) === i
+                          )
+                      return (
+                        <div style={{
+                          background: '#0c1321',
+                          border: '1px solid #1a2235',
+                          borderRadius: 6,
+                          padding: '8px 12px',
+                          fontSize: 11,
+                          minWidth: 140,
+                        }}>
+                          <div style={{ color: '#4d5e7a', marginBottom: 6, fontWeight: 600 }}>
+                            Match {label}
+                          </div>
+                          {shown.map(p => (
+                            <div key={String(p.dataKey)} style={{
+                              display: 'flex', alignItems: 'center', gap: 6,
+                              marginBottom: 3,
+                            }}>
+                              <span style={{
+                                width: 7, height: 7, borderRadius: '50%',
+                                background: String(p.stroke), flexShrink: 0,
+                              }} />
+                              <span style={{ color: '#e6e9f4', flex: 1 }}>{p.dataKey}</span>
+                              <span style={{
+                                fontFamily: '"Bebas Neue", sans-serif',
+                                fontSize: 14, color: '#c9a84c', marginLeft: 8,
+                              }}>{p.value}</span>
+                            </div>
+                          ))}
+                          {!focusTeam && sorted.length > 8 && (
+                            <div style={{ color: '#1e2c44', marginTop: 4, fontSize: 10 }}>
+                              — click a team to pin —
+                            </div>
+                          )}
+                        </div>
+                      )
+                    }}
                   />
-                  {[4, 6, 17].map(pos => (
-                    <ReferenceLine key={pos} y={pos} stroke="#1a2235" strokeDasharray="3 3" />
-                  ))}
+                  {/* Zone boundary reference lines from LEAGUE_ZONES */}
+                  {leagueId && LEAGUE_ZONES[leagueId]
+                    ? LEAGUE_ZONES[leagueId].map(z => (
+                        <ReferenceLine key={`${z.type}-${z.to}`} y={z.to + 0.5}
+                          stroke={ZONE_COLOR[z.type]} strokeDasharray="3 3"
+                          strokeOpacity={0.3} />
+                      ))
+                    : [4, 6, numTeams - 3].map(pos => (
+                        <ReferenceLine key={pos} y={pos + 0.5}
+                          stroke="#1a2235" strokeDasharray="3 3" />
+                      ))
+                  }
                   {posHistory.teams.map(team => (
                     <Line key={team} type="linear" dataKey={team}
                       stroke={teamColorMap[team]}
                       strokeWidth={focusTeam === null ? 1.5 : focusTeam === team ? 2.5 : 0.5}
-                      opacity={focusTeam === null ? 0.85 : focusTeam === team ? 1 : 0.15}
+                      opacity={focusTeam === null ? 0.85 : focusTeam === team ? 1 : 0.12}
                       dot={false} connectNulls activeDot={{ r: 4 }}
                       isAnimationActive={false}
                     />

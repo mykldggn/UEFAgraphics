@@ -411,17 +411,19 @@ def team_xg_timeline_img(
         except Exception as exc:
             logger.error(f"team xg timeline {us_team_id}/{season}: {exc}")
 
-    elif fm_league_id and team_id.isdigit():
+    elif fm_league_id:
         # Non-top-5 + FotMob available: real xG per match
-        has_xg = True
-        ck = {"type": "team_timeline_fotmob", "team_id": team_id,
-              "league_id": fm_league_id, "season": season}
-        if cached := cache.img_get("infographic", ck):
-            return _png(cached)
-        try:
-            history = fotmob.get_team_season_xg(team_id, fm_league_id, season)
-        except Exception as exc:
-            logger.error(f"team xg timeline fotmob {team_id}/{season}: {exc}")
+        fm_tid = fotmob.resolve_fotmob_team_id(team_name, fm_league_id, season)
+        if fm_tid:
+            has_xg = True
+            ck = {"type": "team_timeline_fotmob", "fm_tid": fm_tid,
+                  "league_id": fm_league_id, "season": season}
+            if cached := cache.img_get("infographic", ck):
+                return _png(cached)
+            try:
+                history = fotmob.get_team_season_xg(fm_tid, fm_league_id, season)
+            except Exception as exc:
+                logger.error(f"team xg timeline fotmob {fm_tid}/{season}: {exc}")
 
     if not history:
         # Fallback: fdorg match results (no xG)
@@ -530,10 +532,12 @@ def team_season_card(
         except Exception as e:
             logger.warning(f"Understat enrichment failed for {team_name}: {e}")
 
-    elif fm_league_id and team_id.isdigit():
+    elif fm_league_id:
         # ── FotMob enrichment (non-top-5 leagues) ────────────────────────────
         try:
-            fm_tid = int(team_id)
+            fm_tid = fotmob.resolve_fotmob_team_id(team_name, fm_league_id, season)
+            if not fm_tid:
+                raise ValueError(f"Could not resolve FotMob team ID for {team_name}")
             xg_hist = fotmob.get_team_season_xg(fm_tid, fm_league_id, season)
             if xg_hist:
                 stats["xG"]  = round(sum(m["xG"]  for m in xg_hist), 1)
@@ -611,9 +615,8 @@ def team_lineup_players(
             "formation": formation,
         }
 
-    if fm_league_id and team_id.isdigit():
+    if fm_league_id:
         try:
-            fm_tid    = int(team_id)
             fm_players = fotmob.get_league_player_stats(fm_league_id, season)
             team_pl   = sorted(
                 [p for p in fm_players if _team_match(team_name, p.get("team", ""))],
@@ -621,8 +624,6 @@ def team_lineup_players(
             )[:15]
             if not team_pl:
                 return {"players": [], "formation": ""}
-            for p in team_pl:
-                p["position"] = p.get("pos", "")
             fotmob_hints = _fotmob_col_hints(team_name)
             xi, formation = lineup_viz.build_xi(team_pl, fotmob_hints=fotmob_hints)
             return {
@@ -647,7 +648,7 @@ def team_lineup(
     league_id: str = Query(...),
     season:    int = Query(...),
 ):
-    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 11}
+    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 12}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
@@ -661,15 +662,13 @@ def team_lineup(
         us_team  = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
         us_name  = us_team["name"] if us_team else team_name
         players  = understat.get_most_played_xi(us_slug, season, us_name)
-    elif fm_league_id and team_id.isdigit():
+    elif fm_league_id:
         try:
             fm_players = fotmob.get_league_player_stats(fm_league_id, season)
             players    = sorted(
                 [p for p in fm_players if _team_match(team_name, p.get("team", ""))],
                 key=lambda p: p.get("minutes", 0), reverse=True
             )[:15]
-            for p in players:
-                p["position"] = p.get("pos", "")
         except Exception as exc:
             logger.warning(f"FotMob lineup {team_name}: {exc}")
 
