@@ -389,7 +389,8 @@ export default function LeaguePage() {
   }
 
   function handlePlayerClick(player: string, _team: string) {
-    navigate(`/player/${encodeURIComponent(player)}?season=${season}&league=${leagueId}&source=understat`)
+    const source = isUnderstatLeague ? 'understat' : 'fotmob'
+    navigate(`/player/${encodeURIComponent(player)}?season=${season}&league=${leagueId}&source=${source}&name=${encodeURIComponent(player)}`)
   }
 
   return (

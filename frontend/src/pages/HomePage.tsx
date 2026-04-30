@@ -310,12 +310,13 @@ export default function HomePage() {
               placeholder="Search player name…"
               onSearch={searchPlayers}
               onSelect={player => {
-                const id   = (player as { id?: string }).id
-                const name = player.name ?? player.player ?? ''
+                const id     = (player as { id?: string }).id
+                const name   = player.name ?? (player as { player?: string }).player ?? ''
+                const source = (player as { source?: string }).source ?? 'understat'
                 if (id) {
-                  navigate(`/player/${id}?season=${season}&league=${leagueId}&name=${encodeURIComponent(name)}`)
+                  navigate(`/player/${id}?season=${season}&league=${leagueId}&name=${encodeURIComponent(name)}&source=${source}`)
                 } else {
-                  navigate(`/player/${encodeURIComponent(name)}?season=${season}&league=${leagueId}&source=fbref`)
+                  navigate(`/player/${encodeURIComponent(name)}?season=${season}&league=${leagueId}&source=fotmob&name=${encodeURIComponent(name)}`)
                 }
               }}
             />

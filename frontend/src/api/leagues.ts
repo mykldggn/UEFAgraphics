@@ -17,6 +17,7 @@ export interface Player {
   name?: string
   team: string
   pos?: string
+  source?: string   // 'understat' | 'fotmob'
 }
 
 export interface TableRow {

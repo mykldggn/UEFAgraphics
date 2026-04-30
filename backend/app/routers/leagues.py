@@ -12,6 +12,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 from app.services import football_data_service as fdorg
 from app.services import understat_service as understat
+from app.services import fotmob_service as fotmob
 
 router = APIRouter(prefix="/leagues", tags=["leagues"])
 
@@ -44,7 +45,7 @@ def get_teams(league_id: str, season: int = Query(...)):
 @router.get("/{league_id}/players/search")
 def search_players(
     league_id: str,
-    q: str    = Query(..., min_length=2),
+    q: str      = Query(..., min_length=2),
     season: int = Query(...),
 ):
     if league_id not in fdorg.LEAGUE_LABELS:
@@ -53,12 +54,28 @@ def search_players(
     us_slug = understat.LEAGUE_TO_US.get(league_id)
     if us_slug:
         players = understat.get_league_players(us_slug, season)
-        q_lower  = q.lower()
-        results  = [p for p in players if q_lower in p["name"].lower()][:20]
-    else:
-        results = understat.search_players(q)
+        q_lower = q.lower()
+        results = [p for p in players if q_lower in p["name"].lower()][:20]
+        return {"query": q, "results": results, "source": "understat"}
 
-    return {"query": q, "results": results}
+    fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id)
+    if fm_league_id:
+        # Search within the cached league player pool (fast, no extra requests)
+        pool    = fotmob.get_league_player_stats(fm_league_id, season)
+        q_lower = q.lower()
+        results = [
+            {"id": p["id"], "name": p["player"], "team": p["team"], "source": "fotmob"}
+            for p in pool if q_lower in p["player"].lower()
+        ][:20]
+        # If pool search comes up short try FotMob suggest endpoint
+        if not results:
+            hits = fotmob.search_players_fotmob(q, fm_league_id)
+            results = [{**h, "source": "fotmob"} for h in hits][:20]
+        return {"query": q, "results": results, "source": "fotmob"}
+
+    # Last resort: global Understat search
+    results = understat.search_players(q)
+    return {"query": q, "results": results, "source": "understat"}
 
 
 @router.get("/understat/search")
@@ -115,12 +132,20 @@ def league_table(league_id: str, season: int = Query(...)):
 @router.get("/{league_id}/position-history")
 def league_position_history(league_id: str, season: int = Query(...)):
     us_slug = understat.LEAGUE_TO_US.get(league_id)
-    if not us_slug:
-        raise HTTPException(400, "Position history only available for Understat leagues")
-    result = understat.get_league_position_history(us_slug, season)
-    if not result:
-        raise HTTPException(503, "Could not load position history")
-    return {"league": league_id, "season": season, **result}
+    if us_slug:
+        result = understat.get_league_position_history(us_slug, season)
+        if not result:
+            raise HTTPException(503, "Could not load position history")
+        return {"league": league_id, "season": season, **result}
+
+    fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id)
+    if fm_league_id:
+        result = fotmob.get_league_position_history(fm_league_id, season)
+        if not result:
+            raise HTTPException(503, "Could not load position history")
+        return {"league": league_id, "season": season, **result}
+
+    raise HTTPException(400, "Position history not available for this league")
 
 
 @router.get("/{league_id}/leaders")
@@ -132,7 +157,31 @@ def league_leaders(league_id: str, season: int = Query(...)):
             raise HTTPException(503, "Could not load league leaders")
         return {"league": league_id, "season": season, **result}
 
-    # Non-Understat league: use fdorg top scorers (goals + assists only)
+    # FotMob — full stats pool available
+    fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id)
+    if fm_league_id:
+        pool = fotmob.get_league_player_stats(fm_league_id, season)
+        if pool:
+            def top(key: str, n: int = 10) -> list[dict]:
+                return [
+                    {"player": p["player"], "team": p["team"],
+                     "value": round(float(p.get(key, 0) or 0), 2)}
+                    for p in sorted(
+                        [p for p in pool if float(p.get(key, 0) or 0) > 0],
+                        key=lambda p: float(p.get(key, 0) or 0), reverse=True,
+                    )[:n]
+                ]
+            return {
+                "league":     league_id,
+                "season":     season,
+                "goals":      top("goals"),
+                "assists":    top("assists"),
+                "xg":         top("xg"),
+                "key_passes": top("key_passes"),
+                "shots":      top("shots"),
+            }
+
+    # Last resort: fdorg top scorers (goals + assists only)
     scorers = fdorg.get_top_scorers(league_id, season, limit=20)
     if not scorers:
         raise HTTPException(503, "No leader data available for this league")
@@ -148,9 +197,7 @@ def league_leaders(league_id: str, season: int = Query(...)):
              for s in scorers if s.get("assists", 0) > 0],
             key=lambda x: x["value"], reverse=True
         ),
-        "xg": [],
-        "key_passes": [],
-        "shots": [],
+        "xg": [], "key_passes": [], "shots": [],
     }
 
 

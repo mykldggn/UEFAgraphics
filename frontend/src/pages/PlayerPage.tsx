@@ -37,18 +37,18 @@ export default function PlayerPage() {
 
   const playerName = params.get('name')
     ? decodeURIComponent(params.get('name')!)
-    : source === 'fbref' ? decodeURIComponent(playerId) : playerId
+    : playerId
 
   function imgSrc(): string {
     switch (activeTab) {
       case 'shotmap':
-        return infographicsApi.shotmap(playerId!, cumulative ? undefined : season)
+        return infographicsApi.shotmap(playerId!, cumulative ? undefined : season, source)
       case 'career-xg':
-        return infographicsApi.careerXg(playerId!)
+        return infographicsApi.careerXg(playerId!, undefined, source)
       case 'radar':
-        return infographicsApi.radar(playerId!, leagueId, season, position)
+        return infographicsApi.radar(playerId!, leagueId, season, position, undefined, source)
       case 'summary':
-        return infographicsApi.summaryCard(playerId!, leagueId, cumulative ? undefined : season, position)
+        return infographicsApi.summaryCard(playerId!, leagueId, cumulative ? undefined : season, position, source)
       default:
         return ''
     }

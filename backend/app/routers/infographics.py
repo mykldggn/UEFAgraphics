@@ -56,11 +56,40 @@ def _season_label(season: int) -> str:
 # ─────────────────────────────────────────────────────────────────────────────
 
 @router.get("/player/{player_id}/shotmap")
-def player_shotmap(player_id: str, season: int = Query(None)):
-    ck = {"type": "shotmap", "player_id": player_id, "season": season or "all"}
+def player_shotmap(
+    player_id: str,
+    season: int = Query(None),
+    source: str = Query("understat"),
+):
+    ck = {"type": "shotmap", "player_id": player_id, "season": season or "all",
+          "src": source}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
+    if source == "fotmob":
+        try:
+            import pandas as pd
+            pd_data  = fotmob.get_player_data(player_id)
+            name     = pd_data.get("name", player_id)
+            team_id  = (pd_data.get("primaryTeam") or {}).get("id") or 0
+            season_yr = season or 2024
+            df = fotmob.get_player_season_shots(player_id, team_id, season_yr)
+            label = _season_label(season_yr)
+            if df.empty:
+                df = pd.DataFrame()
+            # Add team column so team_color() picks correct colour
+            team_name = (pd_data.get("primaryTeam") or {}).get("name", "")
+            if not df.empty and "team" not in df.columns:
+                df["team"] = team_name
+        except Exception as exc:
+            logger.error(f"fotmob shotmap {player_id}: {exc}")
+            df = pd.DataFrame(); name = player_id; label = ""; team_name = ""
+
+        png = shotmap.render(df, name, label)
+        cache.img_save("infographic", ck, png)
+        return _png(png)
+
+    # ── Understat path (default) ──────────────────────────────────────────────
     try:
         shots = understat.get_player_shots(player_id)
         meta  = understat.get_player_meta(player_id)
@@ -82,12 +111,48 @@ def player_shotmap(player_id: str, season: int = Query(None)):
 def player_career_xg(
     player_id: str,
     seasons: str = Query(None, description="Comma-separated years e.g. 2022,2023"),
+    source: str = Query("understat"),
 ):
     season_list = [int(s) for s in seasons.split(",")] if seasons else None
-    ck = {"type": "career_xg", "player_id": player_id, "seasons": seasons or "all"}
+    ck = {"type": "career_xg", "player_id": player_id, "seasons": seasons or "all",
+          "src": source}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
+    if source == "fotmob":
+        try:
+            import pandas as pd
+            pd_data = fotmob.get_player_data(player_id)
+            name    = pd_data.get("name", player_id)
+            career  = fotmob.get_player_career_history(player_id)
+            # Build a shot-like DataFrame: one row per season with cumulative-friendly format
+            rows: list[dict] = []
+            for entry in career:
+                yr = entry["season_year"]
+                if season_list and yr not in season_list:
+                    continue
+                # Synthesise goal/no-goal rows from totals so career_xg_viz works
+                g  = int(entry.get("goals", 0))
+                xg = float(entry.get("xg", 0))
+                shots_est = max(int(xg / 0.12), g, 1)  # rough shot count from xG
+                per_shot_xg = xg / shots_est if shots_est else 0
+                for i in range(shots_est):
+                    rows.append({
+                        "season":  yr,
+                        "result":  "Goal" if i < g else "MissedShots",
+                        "xG":      round(per_shot_xg, 3),
+                        "team":    entry.get("team", ""),
+                    })
+            df = pd.DataFrame(rows) if rows else pd.DataFrame()
+        except Exception as exc:
+            logger.error(f"fotmob career_xg {player_id}: {exc}")
+            df = pd.DataFrame(); name = player_id
+
+        png = career_xg_viz.render(name, df, seasons=season_list)
+        cache.img_save("infographic", ck, png)
+        return _png(png)
+
+    # ── Understat path ────────────────────────────────────────────────────────
     try:
         shots = understat.get_player_shots(player_id)
         meta  = understat.get_player_meta(player_id)
@@ -111,12 +176,53 @@ def player_radar(
     season: int     = Query(...),
     position: str   = Query("FW"),
     compare_id: str = Query(None),
+    source: str     = Query("understat"),
 ):
     ck = {"type": "radar", "player_id": player_id, "league_id": league_id,
-          "season": season, "position": position, "compare": compare_id or ""}
+          "season": season, "position": position, "compare": compare_id or "",
+          "src": source}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
+    pos_key = position[:2].upper()
+
+    if source == "fotmob":
+        fm_id = fotmob.FOTMOB_LEAGUES.get(league_id)
+        if not fm_id:
+            raise HTTPException(400, f"FotMob not available for {league_id}")
+
+        all_players = fotmob.get_league_player_stats(fm_id, season)
+        if not all_players:
+            raise HTTPException(503, "Could not load FotMob league player stats")
+
+        player_row = next((p for p in all_players if p["id"] == str(player_id)), None)
+        if player_row is None:
+            # Fallback: fetch individual stats
+            fm_stats = fotmob.get_player_season_stats(player_id, season, fm_id)
+            pd_data  = fotmob.get_player_data(player_id)
+            player_row = {
+                **fm_stats,
+                "player": pd_data.get("name", player_id),
+                "id": str(player_id),
+            }
+
+        params    = radar_viz.FOTMOB_POSITION_PARAMS.get(pos_key, radar_viz.FOTMOB_ATTACKER_PARAMS)
+        pcts, raw = _compute_percentiles(all_players, player_row, params,
+                                         param_map=radar_viz.PARAM_TO_STAT)
+        png = radar_viz.render(
+            player_name  = player_row.get("player", player_id),
+            position     = position,
+            season_label = _season_label(season),
+            percentiles  = pcts,
+            raw_values   = raw,
+            team         = player_row.get("team", ""),
+            compare_name = None,
+            compare_percentiles = None,
+        )
+        cache.img_save("infographic", ck, png)
+        return _png(png)
+
+    # ── Understat path ────────────────────────────────────────────────────────
     us_slug = understat.LEAGUE_TO_US.get(league_id)
     if not us_slug:
         raise HTTPException(400, f"Radar not available for {league_id} — "
@@ -128,7 +234,6 @@ def player_radar(
 
     player_row = next((p for p in all_players if p["id"] == player_id), None)
     if player_row is None:
-        # fall back to meta
         meta = understat.get_player_meta(player_id)
         season_stats = understat.get_player_season_stats(player_id, season)
         if not season_stats:
@@ -136,7 +241,7 @@ def player_radar(
         player_row = {**season_stats, "player": meta.get("name", player_id),
                       "id": player_id}
 
-    params    = radar_viz.POSITION_PARAMS.get(position[:2].upper(), radar_viz.ATTACKER_PARAMS)
+    params    = radar_viz.POSITION_PARAMS.get(pos_key, radar_viz.ATTACKER_PARAMS)
     pcts, raw = _compute_percentiles(all_players, player_row, params)
 
     comp_pcts = None
@@ -165,16 +270,65 @@ def player_summary_card(
     league_id: str = Query(None),
     season: int    = Query(None),
     position: str  = Query("FW"),
+    source: str    = Query("understat"),
 ):
     ck = {"type": "summary_card", "player_id": player_id,
-          "league_id": league_id, "season": season or "all"}
+          "league_id": league_id, "season": season or "all", "src": source}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
+    if source == "fotmob":
+        pd_data  = fotmob.get_player_data(player_id)
+        name     = pd_data.get("name", player_id)
+        fm_id    = fotmob.FOTMOB_LEAGUES.get(league_id) if league_id else None
+
+        if season is None:
+            # Career aggregate
+            career = fotmob.get_player_career_history(player_id)
+            if not career:
+                raise HTTPException(404, f"No career data for player {player_id}")
+            stats = {
+                "goals":      sum(e.get("goals", 0) for e in career),
+                "assists":    sum(e.get("assists", 0) for e in career),
+                "xG":         round(sum(e.get("xg", 0) for e in career), 2),
+                "xA":         round(sum(e.get("xa", 0) for e in career), 2),
+                "minutes":    sum(e.get("minutes", 0) for e in career),
+                "apps":       len(career),
+            }
+            team         = career[-1].get("team", "") if career else ""
+            season_label = "Career"
+        else:
+            s = fotmob.get_player_season_stats(player_id, season, fm_id)
+            if not s:
+                raise HTTPException(404, f"No FotMob stats for player {player_id} in {season}")
+            stats = {
+                "goals":      s.get("goals", 0),
+                "assists":    s.get("assists", 0),
+                "xG":         round(float(s.get("xg", 0)), 2),
+                "xA":         round(float(s.get("xa", 0)), 2),
+                "shots":      s.get("shots", 0),
+                "key_passes": s.get("key_passes", 0),
+                "minutes":    s.get("minutes", 0),
+                "apps":       s.get("apps", 0),
+            }
+            team         = s.get("team", "")
+            season_label = _season_label(season)
+
+        png = summary_card.render(
+            player_name  = name,
+            position     = position,
+            team         = team,
+            season_label = season_label,
+            stats        = stats,
+            league_label = fdorg.LEAGUE_LABELS.get(league_id, league_id) if league_id else "",
+        )
+        cache.img_save("infographic", ck, png)
+        return _png(png)
+
+    # ── Understat path ────────────────────────────────────────────────────────
     meta = understat.get_player_meta(player_id)
 
     if season is None:
-        # Career aggregate across all seasons
         all_seasons = meta.get("season_stats", [])
         if not all_seasons:
             raise HTTPException(404, f"No career stats for player {player_id}")
@@ -190,7 +344,6 @@ def player_summary_card(
             "apps":       _sum("apps"),
             "key_passes": _sum("key_passes"),
         }
-        # Use team player spent the most seasons (by apps) with
         from collections import Counter
         team_apps: Counter = Counter()
         for s in all_seasons:
@@ -241,8 +394,10 @@ def team_xg_timeline_img(
     has_xg     = bool(us_slug)
     history: list[dict] = []
 
+    fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id) if league_id else None
+
     if us_slug:
-        # Top-5 league: resolve Understat team ID and fetch xG history
+        # Top-5 league: Understat xG
         us_team_id = team_id
         us_teams   = understat.get_league_teams(us_slug, season)
         us_team    = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
@@ -255,9 +410,22 @@ def team_xg_timeline_img(
             history = understat.get_team_xg_history(us_team_id, season, league=us_slug)
         except Exception as exc:
             logger.error(f"team xg timeline {us_team_id}/{season}: {exc}")
-    else:
-        # Non-top-5 league: use football-data.org results (no xG)
-        # Resolve numeric fdorg team ID — the URL param may be a team name string
+
+    elif fm_league_id and team_id.isdigit():
+        # Non-top-5 + FotMob available: real xG per match
+        has_xg = True
+        ck = {"type": "team_timeline_fotmob", "team_id": team_id,
+              "league_id": fm_league_id, "season": season}
+        if cached := cache.img_get("infographic", ck):
+            return _png(cached)
+        try:
+            history = fotmob.get_team_season_xg(team_id, fm_league_id, season)
+        except Exception as exc:
+            logger.error(f"team xg timeline fotmob {team_id}/{season}: {exc}")
+
+    if not history:
+        # Fallback: fdorg match results (no xG)
+        has_xg  = False
         fdorg_id = team_id
         if not team_id.isdigit() and league_id:
             table = fdorg.get_standings(league_id, season)
@@ -277,10 +445,9 @@ def team_xg_timeline_img(
     if not history:
         raise HTTPException(503, "No match data available for this team/season")
 
-    # Opponent name enrichment from history (FotMob blocked on Railway, skip)
     opponents: list[dict] | None = [
         {"name": h.get("opponent", ""), "crest_url": ""} for h in history
-    ] if history else None
+    ]
 
     png = team_xg_timeline.render(team_name, _season_label(season), history,
                                   opponents=opponents, has_xg=has_xg)
@@ -314,15 +481,15 @@ def team_season_card(
         pos_h = [{"matchday": 1,  "position": rank},
                  {"matchday": 38, "position": rank}]
 
-    # Top scorers from football-data.org
+    # Top scorers from football-data.org (baseline — may be overwritten below)
     top_scorers = fdorg.get_top_scorers(league_id, season, limit=8)
-    # Filter to this team
-    top_scorers = [s for s in top_scorers
-                   if _team_match(team_name, s.get("team", ""))]
+    top_scorers = [s for s in top_scorers if _team_match(team_name, s.get("team", ""))]
 
-    # Understat enrichment: xG, clean sheets, position history, top scorers
-    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    us_slug      = understat.LEAGUE_TO_US.get(league_id)
+    fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id) if league_id else None
+
     if us_slug:
+        # ── Understat enrichment (top-5 leagues) ─────────────────────────────
         try:
             us_teams = understat.get_league_teams(us_slug, season)
             us_team  = next(
@@ -333,11 +500,9 @@ def team_season_card(
                 stats["xGA"]  = us_team.get("xGA")
                 stats["xPts"] = us_team.get("xPts")
 
-                # Clean sheets + position history from per-match data
                 xg_hist = understat.get_team_xg_history(us_team["id"], season, league=us_slug)
                 if xg_hist:
                     stats["clean_sheets"] = sum(1 for m in xg_hist if m.get("goals_against", 1) == 0)
-                    # Build real position history from league position history
                     pos_history_data = understat.get_league_position_history(us_slug, season)
                     if pos_history_data:
                         pos_h = [
@@ -346,7 +511,6 @@ def team_season_card(
                             if row.get(us_team["name"]) is not None
                         ]
 
-                # Final position from standings
                 sorted_teams = sorted(us_teams, key=lambda t: t.get("pts", 0), reverse=True)
                 final_pos = next(
                     (i + 1 for i, t in enumerate(sorted_teams)
@@ -355,11 +519,8 @@ def team_season_card(
                 if final_pos:
                     stats["final_position"] = final_pos
 
-                # Top scorers from league player stats (already cached, no extra requests)
                 all_players = understat.get_league_player_stats(us_slug, season)
-                team_players = [
-                    p for p in all_players if p.get("team") == us_team["name"]
-                ]
+                team_players = [p for p in all_players if p.get("team") == us_team["name"]]
                 if team_players:
                     top_scorers = sorted(
                         [{"player": p["player"], "goals": p.get("goals", 0),
@@ -368,6 +529,43 @@ def team_season_card(
                     )[:8]
         except Exception as e:
             logger.warning(f"Understat enrichment failed for {team_name}: {e}")
+
+    elif fm_league_id and team_id.isdigit():
+        # ── FotMob enrichment (non-top-5 leagues) ────────────────────────────
+        try:
+            fm_tid = int(team_id)
+            xg_hist = fotmob.get_team_season_xg(fm_tid, fm_league_id, season)
+            if xg_hist:
+                stats["xG"]  = round(sum(m["xG"]  for m in xg_hist), 1)
+                stats["xGA"] = round(sum(m["xGA"] for m in xg_hist), 1)
+                stats["clean_sheets"] = sum(1 for m in xg_hist if m.get("goals_against", 1) == 0)
+
+            pos_data = fotmob.get_league_position_history(fm_league_id, season)
+            if pos_data:
+                # Find team name as it appears in the pos history keys
+                fm_team_key = next(
+                    (t for t in pos_data.get("teams", []) if _team_match(team_name, t)), None
+                )
+                if fm_team_key:
+                    pos_h = [
+                        {"matchday": row["match"], "position": row.get(fm_team_key)}
+                        for row in pos_data.get("history", [])
+                        if row.get(fm_team_key) is not None
+                    ]
+                    if pos_h:
+                        stats["final_position"] = pos_h[-1]["position"]
+
+            # Top scorers from FotMob league player pool
+            fm_players = fotmob.get_league_player_stats(fm_league_id, season)
+            team_players = [p for p in fm_players if _team_match(team_name, p.get("team", ""))]
+            if team_players:
+                top_scorers = sorted(
+                    [{"player": p["player"], "goals": p.get("goals", 0),
+                      "xG": round(float(p.get("xg", 0)), 2)} for p in team_players],
+                    key=lambda x: x["goals"], reverse=True
+                )[:8]
+        except Exception as e:
+            logger.warning(f"FotMob enrichment failed for {team_name}: {e}")
 
     png = team_card_viz.render(
         team_name      = team_name,
@@ -390,33 +588,56 @@ def team_lineup_players(
 ):
     """Return XI player list as JSON (for clickable overlays)."""
     us_slug = understat.LEAGUE_TO_US.get(league_id)
-    if not us_slug:
-        return {"players": [], "formation": "", "unavailable": True}
+    fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id)
 
-    us_teams  = understat.get_league_teams(us_slug, season)
-    us_team   = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
-    us_name   = us_team["name"] if us_team else team_name
+    if us_slug:
+        us_teams = understat.get_league_teams(us_slug, season)
+        us_team  = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
+        us_name  = us_team["name"] if us_team else team_name
+        players  = understat.get_most_played_xi(us_slug, season, us_name)
+        if not players:
+            return {"players": [], "formation": ""}
+        fotmob_hints = _fotmob_col_hints(team_name)
+        xi, formation = lineup_viz.build_xi(players, fotmob_hints=fotmob_hints)
+        player_pool   = understat.get_league_player_stats(us_slug, season)
+        id_map = {p["player"]: p["id"] for p in player_pool}
+        return {
+            "players": [
+                {"player": p["player"], "position": p["position"],
+                 "minutes": p["minutes"], "id": id_map.get(p["player"]),
+                 "source": "understat"}
+                for p in xi
+            ],
+            "formation": formation,
+        }
 
-    players = understat.get_most_played_xi(us_slug, season, us_name)
-    if not players:
-        return {"players": [], "formation": ""}
+    if fm_league_id and team_id.isdigit():
+        try:
+            fm_tid    = int(team_id)
+            fm_players = fotmob.get_league_player_stats(fm_league_id, season)
+            team_pl   = sorted(
+                [p for p in fm_players if _team_match(team_name, p.get("team", ""))],
+                key=lambda p: p.get("minutes", 0), reverse=True
+            )[:15]
+            if not team_pl:
+                return {"players": [], "formation": ""}
+            for p in team_pl:
+                p["position"] = p.get("pos", "")
+            fotmob_hints = _fotmob_col_hints(team_name)
+            xi, formation = lineup_viz.build_xi(team_pl, fotmob_hints=fotmob_hints)
+            return {
+                "players": [
+                    {"player": p["player"], "position": p["position"],
+                     "minutes": p.get("minutes", 0),
+                     "id": p.get("id"), "source": "fotmob"}
+                    for p in xi
+                ],
+                "formation": formation,
+            }
+        except Exception as exc:
+            logger.warning(f"FotMob lineup-players {team_name}: {exc}")
 
-    fotmob_hints = _fotmob_col_hints(team_name)
-    xi, formation = lineup_viz.build_xi(players, fotmob_hints=fotmob_hints)
-    # Enrich with Understat player IDs for navigation
-    player_pool = understat.get_league_player_stats(us_slug, season)
-    id_map = {p["player"]: p["id"] for p in player_pool}
-
-    result = []
-    for p in xi:
-        name = p["player"]
-        result.append({
-            "player":   name,
-            "position": p["position"],
-            "minutes":  p["minutes"],
-            "id":       id_map.get(name),
-        })
-    return {"players": result, "formation": formation}
+    return {"players": [], "formation": "", "unavailable": True}
 
 
 @router.get("/team/{team_id}/lineup")
@@ -426,39 +647,47 @@ def team_lineup(
     league_id: str = Query(...),
     season:    int = Query(...),
 ):
-    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 10}
+    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 11}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
-    us_slug = understat.LEAGUE_TO_US.get(league_id)
-    if not us_slug:
+    us_slug      = understat.LEAGUE_TO_US.get(league_id)
+    fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id)
+
+    players: list[dict] = []
+
+    if us_slug:
+        us_teams = understat.get_league_teams(us_slug, season)
+        us_team  = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
+        us_name  = us_team["name"] if us_team else team_name
+        players  = understat.get_most_played_xi(us_slug, season, us_name)
+    elif fm_league_id and team_id.isdigit():
+        try:
+            fm_players = fotmob.get_league_player_stats(fm_league_id, season)
+            players    = sorted(
+                [p for p in fm_players if _team_match(team_name, p.get("team", ""))],
+                key=lambda p: p.get("minutes", 0), reverse=True
+            )[:15]
+            for p in players:
+                p["position"] = p.get("pos", "")
+        except Exception as exc:
+            logger.warning(f"FotMob lineup {team_name}: {exc}")
+
+    if not players:
         from app.viz.common import get_font
-        png = lineup_viz._no_data_png(
-            team_name,
-            f"Most Played XI unavailable — xG/lineup data only covers top 5 leagues",
-            get_font(),
-        )
+        png = lineup_viz._no_data_png(team_name, "Lineup data unavailable", get_font())
         return _png(png)
 
-    # Resolve Understat team name
-    us_teams  = understat.get_league_teams(us_slug, season)
-    us_team   = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
-    us_name   = us_team["name"] if us_team else team_name
-
-    players = understat.get_most_played_xi(us_slug, season, us_name)
-    if not players:
-        raise HTTPException(503, "No player data available")
-
-    manager      = fdorg.get_team_coach(team_id)
+    manager      = fdorg.get_team_coach(team_id) if team_id.isdigit() else ""
     fotmob_hints = _fotmob_col_hints(team_name)
 
     png = lineup_viz.render(
-        team_name     = team_name,
-        season_label  = _season_label(season),
-        league_label  = fdorg.LEAGUE_LABELS.get(league_id, league_id),
-        players       = players,
-        manager       = manager,
-        fotmob_hints  = fotmob_hints,
+        team_name    = team_name,
+        season_label = _season_label(season),
+        league_label = fdorg.LEAGUE_LABELS.get(league_id, league_id),
+        players      = players,
+        manager      = manager,
+        fotmob_hints = fotmob_hints,
     )
     cache.img_save("infographic", ck, png)
     return _png(png)
@@ -510,12 +739,14 @@ def _compute_percentiles(
     all_players: list[dict],
     player: dict,
     params: list[str],
+    param_map: dict[str, str] | None = None,
 ) -> tuple[dict[str, float], dict[str, float]]:
+    pmap = param_map if param_map is not None else radar_viz.PARAM_TO_STAT
     percentiles: dict[str, float] = {}
     raw:         dict[str, float] = {}
 
     for param in params:
-        col = radar_viz.PARAM_TO_STAT.get(param)
+        col = pmap.get(param)
         if not col:
             continue
         vals = []

@@ -55,6 +55,35 @@ PARAM_TO_STAT: dict[str, str] = {
     "Key Passes/90": "key_passes_p90",
     "xGChain/90":    "xgchain_p90",
     "xGBuildup/90":  "xgbuildup_p90",
+    # FotMob-available extras
+    "Dribbles/90":   "dribbles_p90",
+}
+
+# FotMob radar params — only uses stats FotMob provides (no npxG / xGChain / xGBuildup)
+FOTMOB_ATTACKER_PARAMS = [
+    "Goals/90", "xG/90", "Assists/90", "xA/90",
+    "Shots/90", "Key Passes/90", "Dribbles/90",
+]
+FOTMOB_MIDFIELDER_PARAMS = [
+    "Goals/90", "xG/90", "Assists/90", "xA/90",
+    "Shots/90", "Key Passes/90", "Dribbles/90",
+]
+FOTMOB_DEFENDER_PARAMS = [
+    "Goals/90", "Assists/90", "xA/90",
+    "xG/90", "Shots/90", "Key Passes/90",
+]
+FOTMOB_GK_PARAMS = [
+    "Goals/90", "Assists/90", "xA/90", "Key Passes/90",
+]
+
+FOTMOB_POSITION_PARAMS: dict[str, list[str]] = {
+    "FW": FOTMOB_ATTACKER_PARAMS, "ST": FOTMOB_ATTACKER_PARAMS,
+    "MF": FOTMOB_MIDFIELDER_PARAMS, "CM": FOTMOB_MIDFIELDER_PARAMS,
+    "AM": FOTMOB_MIDFIELDER_PARAMS, "DM": FOTMOB_MIDFIELDER_PARAMS,
+    "DF": FOTMOB_DEFENDER_PARAMS,  "CB": FOTMOB_DEFENDER_PARAMS,
+    "FB": FOTMOB_DEFENDER_PARAMS,  "WB": FOTMOB_DEFENDER_PARAMS,
+    "GK": FOTMOB_GK_PARAMS,
+    "Sub": FOTMOB_ATTACKER_PARAMS,
 }
 
 # Colour bands
