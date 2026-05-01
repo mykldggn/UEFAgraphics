@@ -13,6 +13,7 @@ from fastapi import APIRouter, HTTPException, Query
 from app.services import football_data_service as fdorg
 from app.services import understat_service as understat
 from app.services import fotmob_service as fotmob
+from app.services import thesportsdb_service as tsdb
 
 router = APIRouter(prefix="/leagues", tags=["leagues"])
 
@@ -65,22 +66,30 @@ def search_players(
 
     fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id)
     if fm_league_id:
-        # Search within the cached league player pool (fast, no extra requests)
+        # 1. Search within the cached FotMob league player pool (works when FotMob is reachable)
         pool    = fotmob.get_league_player_stats(fm_league_id, season)
         q_lower = q.lower()
         results = [
             {"id": p["id"], "name": p["player"], "team": p["team"], "source": "fotmob"}
             for p in pool if q_lower in p["player"].lower()
         ][:20]
-        # If pool search comes up short try FotMob suggest endpoint
+
+        # 2. FotMob suggest endpoint (may be blocked on Railway)
         if not results:
             hits = fotmob.search_players_fotmob(q, fm_league_id)
             results = [{**h, "source": "fotmob"} for h in hits][:20]
-        return {"query": q, "results": results, "source": "fotmob"}
 
-    # Last resort: global Understat search
-    results = understat.search_players(q)
-    return {"query": q, "results": results, "source": "understat"}
+        # 3. TheSportsDB — Railway-safe fallback, always works
+        if not results:
+            results = tsdb.search_players(q, league_id)
+
+        return {"query": q, "results": results, "source": "fotmob" if results and results[0].get("source") != "tsdb" else "tsdb"}
+
+    # Last resort: TheSportsDB global search then Understat
+    results = tsdb.search_players(q, league_id)
+    if not results:
+        results = understat.search_players(q)
+    return {"query": q, "results": results, "source": "tsdb" if results else "understat"}
 
 
 @router.get("/understat/search")

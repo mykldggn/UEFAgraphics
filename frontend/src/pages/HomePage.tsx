@@ -312,8 +312,10 @@ export default function HomePage() {
               onSelect={player => {
                 const id     = (player as { id?: string }).id
                 const name   = player.name ?? (player as { player?: string }).player ?? ''
-                const source = (player as { source?: string }).source ?? 'understat'
-                if (id) {
+                const rawSrc = (player as { source?: string }).source ?? 'understat'
+                // TSDB players have no FotMob/Understat ID — treat as fotmob name-based lookup
+                const source = rawSrc === 'tsdb' ? 'fotmob' : rawSrc
+                if (id && rawSrc !== 'tsdb') {
                   navigate(`/player/${id}?season=${season}&league=${leagueId}&name=${encodeURIComponent(name)}&source=${source}`)
                 } else {
                   navigate(`/player/${encodeURIComponent(name)}?season=${season}&league=${leagueId}&source=fotmob&name=${encodeURIComponent(name)}`)
