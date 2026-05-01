@@ -323,6 +323,37 @@ def _formation_str(n_def: int, n_mid: int, n_fwd: int) -> str:
 
 # ── Build XI ─────────────────────────────────────────────────────────────────
 
+def _fotmob_row_to_pos(row: int, n_rows: int) -> str:
+    """
+    Convert FotMob lineup row number to position category.
+    row 1      → GK
+    row 2      → DEF
+    row n_rows → FWD  (last row = strikers/forwards)
+    anything between 2 and n_rows → MID
+    n_rows is total number of distinct rows in the lineup (incl. GK row).
+    """
+    if row == 1:
+        return "GK"
+    if row == 2:
+        return "DEF"
+    if row >= n_rows:
+        return "FWD"
+    return "MID"
+
+
+def _lookup_row(p: dict, row_hints: dict[str, int]) -> int | None:
+    """Find a player's FotMob row via last-name lookup (same logic as _fotmob_col)."""
+    name = p.get("player", p.get("player_name", ""))
+    last = name.split()[-1].lower() if name else ""
+    if last and last in row_hints:
+        return row_hints[last]
+    # partial match
+    for key, val in row_hints.items():
+        if last and (last in key or key in last):
+            return val
+    return None
+
+
 def _parse_formation(formation_str: str) -> tuple[int, int, int] | None:
     """
     Parse a formation string into (n_def, n_mid, n_fwd).
@@ -349,6 +380,7 @@ def build_xi(
     players: list[dict],
     fotmob_hints: dict[str, int] | None = None,
     forced_formation: str | None = None,
+    row_hints: dict[str, int] | None = None,
 ) -> tuple[list[dict], str]:
     """
     Returns (xi_with_coords, formation_str).
@@ -384,10 +416,20 @@ def build_xi(
     parsed = _parse_formation(forced_formation) if forced_formation else None
     if parsed:
         n_def_t, n_mid_t, n_fwd_t = parsed
+        # n_rows = number of lines including GK (e.g. 4-3-3 → 4 rows)
+        n_rows = len([x for x in str(forced_formation).split("-") if x.strip().isdigit()]) + 1
 
-        def_pool = sorted([p for p in out_pool if _strict_pos(p) == "DEF"],
+        def _classify(p: dict) -> str:
+            """Use FotMob row_hints when available, else fall back to _strict_pos."""
+            if row_hints:
+                row = _lookup_row(p, row_hints)
+                if row is not None:
+                    return _fotmob_row_to_pos(row, n_rows)
+            return _strict_pos(p)
+
+        def_pool = sorted([p for p in out_pool if _classify(p) == "DEF"],
                           key=_total_mins, reverse=True)
-        fwd_pool = sorted([p for p in out_pool if _strict_pos(p) == "FWD"],
+        fwd_pool = sorted([p for p in out_pool if _classify(p) == "FWD"],
                           key=_total_mins, reverse=True)
 
         xi_def = def_pool[:n_def_t]
@@ -398,18 +440,21 @@ def build_xi(
         remaining = [p for p in out_pool if id(p) not in used]
         xi_mid = remaining[:n_mid_t]
 
-        # If any group is short, pull from leftover pool to fill
-        used2 = {id(p) for p in xi_def + xi_mid + xi_fwd}
-        leftover = [p for p in out_pool if id(p) not in used2]
-        for target, group in [(n_def_t, xi_def), (n_fwd_t, xi_fwd), (n_mid_t, xi_mid)]:
-            while len(group) < target and leftover:
-                group.append(leftover.pop(0))
-                leftover = [p for p in out_pool
-                            if id(p) not in {id(q) for q in xi_def + xi_mid + xi_fwd}]
+        # If any group is short (row_hints might not cover everyone), pull from leftover
+        for _ in range(3):
+            used2 = {id(p) for p in xi_def + xi_mid + xi_fwd}
+            leftover = [p for p in out_pool if id(p) not in used2]
+            if len(xi_def) < n_def_t and leftover:
+                xi_def.append(leftover.pop(0))
+            elif len(xi_fwd) < n_fwd_t and leftover:
+                xi_fwd.append(leftover.pop(0))
+            elif len(xi_mid) < n_mid_t and leftover:
+                xi_mid.append(leftover.pop(0))
+            else:
+                break
 
         n_def, n_mid, n_fwd = len(xi_def), len(xi_mid), len(xi_fwd)
 
-        # Assign effective positions so downstream rendering is consistent
         for p in xi_def: p["_pos_override"] = "DEF"
         for p in xi_mid: p["_pos_override"] = "MID"
         for p in xi_fwd: p["_pos_override"] = "FWD"
@@ -436,6 +481,40 @@ def build_xi(
         return result, _formation_str(n_def, n_mid, n_fwd)
 
     # ── Fallback: heuristic path (Understat / no formation hint) ─────────────
+    # If we have row_hints but no forced formation, still use them for classification
+    # by inferring the formation from the most likely shape (4 rows = 4-X-Y)
+    if row_hints and not parsed:
+        # Determine n_rows from the row_hints data (max row value seen)
+        n_rows_inferred = max(row_hints.values(), default=4)
+
+        def _classify_heuristic(p: dict) -> str:
+            if row_hints:
+                row = _lookup_row(p, row_hints)
+                if row is not None:
+                    return _fotmob_row_to_pos(row, n_rows_inferred)
+            return _strict_pos(p)
+
+        xi_out = list(out_pool[:10])
+        xi_def = sorted([p for p in xi_out if _classify_heuristic(p) == "DEF"], key=_total_mins, reverse=True)
+        xi_mid = sorted([p for p in xi_out if _classify_heuristic(p) == "MID"], key=_total_mins, reverse=True)
+        xi_fwd = sorted([p for p in xi_out if _classify_heuristic(p) == "FWD"], key=_total_mins, reverse=True)
+
+        n_def, n_mid, n_fwd = len(xi_def), len(xi_mid), len(xi_fwd)
+        def_ordered = _order_def_line(xi_def, n_def, fotmob_hints)
+        mid_ordered = _order_by_fotmob(xi_mid, fotmob_hints) or xi_mid
+        fwd_ordered = _order_fwd_line(xi_fwd, fotmob_hints)
+        xi_ordered  = xi_gk + def_ordered + mid_ordered + fwd_ordered
+        coords      = _formation_coords(n_def, n_mid, n_fwd, mid_players=mid_ordered)
+        result = []
+        for player, (x, y) in zip(xi_ordered, coords):
+            result.append({
+                "player":   player.get("player", player.get("player_name", "?")),
+                "minutes":  int(_total_mins(player)),
+                "position": _classify_heuristic(player),
+                "x": x, "y": y,
+            })
+        return result, _formation_str(n_def, n_mid, n_fwd)
+
     # Take top 10 outfield by total minutes
     xi_out = list(out_pool[:10])
 
@@ -506,6 +585,7 @@ def render(
     players:          list[dict],
     manager:          str = "",
     fotmob_hints:     dict[str, int] | None = None,
+    row_hints:        dict[str, int] | None = None,
     forced_formation: str | None = None,
 ) -> bytes:
     font    = get_font()
@@ -515,6 +595,7 @@ def render(
         return _no_data_png(team_name, season_label, font)
 
     xi, formation = build_xi(players, fotmob_hints=fotmob_hints,
+                             row_hints=row_hints,
                              forced_formation=forced_formation)
     if not xi:
         return _no_data_png(team_name, season_label, font)

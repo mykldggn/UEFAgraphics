@@ -157,7 +157,7 @@ function formatDateLabel(isoDate: string): string {
 }
 
 // ── Competition filter buttons ──────────────────────────────────────────────
-const COMP_FILTERS = ['All', 'UCL', 'UEL', 'PL', 'LL', 'BL', 'SA', 'L1']
+const COMP_FILTERS = ['All', 'UCL', 'UEL', 'UECL', 'PL', 'LL', 'BL', 'SA', 'L1', 'CH', 'ERE', 'SP']
 
 function NavBtn({ label, onClick, disabled }: { label: string; onClick: () => void; disabled?: boolean }) {
   return (
@@ -255,7 +255,7 @@ export default function ScoresTicker() {
     ? matches
     : matches.filter(m => leagueLabel(m) === compFilter)
 
-  const canGoForward = selectedDate < addDays(todayIso, 1)
+  const canGoForward = selectedDate < addDays(todayIso, 7)
   const isToday     = selectedDate === todayIso
 
   // Always render — controls should be visible even when no matches load
