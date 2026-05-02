@@ -61,7 +61,7 @@ def player_shotmap(
     player_id: str,
     season: int = Query(None),
 ):
-    ck = {"type": "shotmap", "player_id": player_id, "season": season or "all"}
+    ck = {"type": "shotmap", "player_id": player_id, "season": season or "all", "v": 2}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
