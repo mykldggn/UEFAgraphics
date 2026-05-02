@@ -2,24 +2,23 @@ import request, { imgUrl } from './client'
 
 export const infographicsApi = {
   // Player
-  shotmap: (playerId: string, season?: number, source = 'understat') =>
+  shotmap: (playerId: string, season?: number) =>
     imgUrl(`/infographics/player/${playerId}/shotmap`,
-           { ...(season != null ? { season } : {}), source }),
+           { ...(season != null ? { season } : {}) }),
 
-  careerXg: (playerId: string, seasons?: number[], source = 'understat') =>
+  careerXg: (playerId: string, seasons?: number[]) =>
     imgUrl(`/infographics/player/${playerId}/career-xg`,
-           { ...(seasons ? { seasons: seasons.join(',') } : {}), source }),
+           { ...(seasons ? { seasons: seasons.join(',') } : {}) }),
 
   radar: (playerId: string, leagueId: string, season: number, position: string,
-          compareId?: string, source = 'understat') => {
-    const params: Record<string, string | number> = { league_id: leagueId, season, position, source }
+          compareId?: string) => {
+    const params: Record<string, string | number> = { league_id: leagueId, season, position }
     if (compareId) params.compare_id = compareId
     return imgUrl(`/infographics/player/${playerId}/radar`, params)
   },
 
-  summaryCard: (playerId: string, leagueId: string, season?: number, position?: string,
-                source = 'understat') => {
-    const params: Record<string, string | number> = { league_id: leagueId, source }
+  summaryCard: (playerId: string, leagueId: string, season?: number, position?: string) => {
+    const params: Record<string, string | number> = { league_id: leagueId }
     if (season != null) params.season = season
     if (position)       params.position = position
     return imgUrl(`/infographics/player/${playerId}/summary-card`, params)

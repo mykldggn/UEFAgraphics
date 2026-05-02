@@ -142,8 +142,7 @@ export default function TeamPage() {
               key={i}
               onClick={() => {
                 if (p.id) {
-                  const src = p.source ?? 'understat'
-                  navigate(`/player/${p.id}?season=${season}&league=${leagueId}&name=${encodeURIComponent(p.player)}&source=${src}`)
+                  navigate(`/player/${p.id}?season=${season}&league=${leagueId}&name=${encodeURIComponent(p.player)}`)
                 }
               }}
               style={{

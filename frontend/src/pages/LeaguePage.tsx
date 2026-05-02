@@ -146,49 +146,63 @@ const LEAGUE_ZONES: Record<string, ZoneEntry[]> = {
     { from: 17, to: 18, type: 'relegation' },
   ],
   // ── Netherlands ──────────────────────────────────────────────────────────
-  'NED-1': [  // Eredivisie, 18 teams
+  'NED-1': [  // Eredivisie, 18 teams — champion enters CL qualifying (not direct)
     { from: 1, to: 1, type: 'champion' },
-    { from: 2, to: 2, type: 'cl' },
-    { from: 3, to: 3, type: 'el' },
-    { from: 4, to: 6, type: 'ecl' },
+    { from: 2, to: 2, type: 'el' },          // runner-up → EL qualifying
+    { from: 3, to: 5, type: 'ecl' },         // 3rd–5th → ECL qualifying
     { from: 16, to: 16, type: 'rel_playoff' },
     { from: 17, to: 18, type: 'relegation' },
   ],
   // ── Portugal ─────────────────────────────────────────────────────────────
-  'PRT-1': [  // Primeira Liga, 18 teams
+  'PRT-1': [  // Primeira Liga, 18 teams — champion enters CL qualifying (not direct)
     { from: 1, to: 1, type: 'champion' },
-    { from: 2, to: 2, type: 'cl' },
-    { from: 3, to: 4, type: 'el' },
-    { from: 5, to: 5, type: 'ecl' },
+    { from: 2, to: 3, type: 'el' },          // 2nd–3rd → EL qualifying
+    { from: 4, to: 5, type: 'ecl' },         // 4th–5th → ECL qualifying
     { from: 16, to: 17, type: 'rel_playoff' },
     { from: 18, to: 18, type: 'relegation' },
   ],
   // ── Belgium ──────────────────────────────────────────────────────────────
-  'BEL-1': [  // Pro League, 18 teams (simplified — ignores Championship playoffs)
+  'BEL-1': [  // Pro League, 16 teams — champion enters CL qualifying (not direct)
     { from: 1, to: 1, type: 'champion' },
-    { from: 2, to: 2, type: 'cl' },
-    { from: 3, to: 4, type: 'el' },
-    { from: 5, to: 5, type: 'ecl' },
-    { from: 16, to: 18, type: 'relegation' },
+    { from: 2, to: 2, type: 'el' },          // runner-up → EL qualifying
+    { from: 3, to: 4, type: 'ecl' },         // 3rd–4th → ECL qualifying
+    { from: 15, to: 15, type: 'rel_playoff' },
+    { from: 16, to: 16, type: 'relegation' },
   ],
   // ── Scotland ─────────────────────────────────────────────────────────────
-  'SCO-1': [  // Scottish Premiership, 12 teams
+  'SCO-1': [  // Scottish Premiership, 12 teams — champion enters CL qualifying (not direct)
     { from: 1, to: 1, type: 'champion' },
-    { from: 2, to: 2, type: 'cl' },
-    { from: 3, to: 4, type: 'el' },
-    { from: 5, to: 6, type: 'ecl' },
+    { from: 2, to: 2, type: 'el' },          // runner-up → EL qualifying
+    { from: 3, to: 3, type: 'ecl' },         // 3rd → ECL qualifying
     { from: 11, to: 11, type: 'rel_playoff' },
     { from: 12, to: 12, type: 'relegation' },
   ],
   // ── Turkey ───────────────────────────────────────────────────────────────
-  'TUR-1': [  // Süper Lig, 19 teams
+  'TUR-1': [  // Süper Lig, 19 teams — champion enters CL qualifying (not direct)
     { from: 1, to: 1, type: 'champion' },
-    { from: 2, to: 2, type: 'cl' },
-    { from: 3, to: 4, type: 'el' },
-    { from: 5, to: 5, type: 'ecl' },
+    { from: 2, to: 3, type: 'el' },          // 2nd–3rd → EL qualifying
+    { from: 4, to: 5, type: 'ecl' },         // 4th–5th → ECL qualifying
     { from: 16, to: 17, type: 'rel_playoff' },
     { from: 18, to: 19, type: 'relegation' },
   ],
+}
+
+// Total matches per team per season (used for relegation maths)
+const LEAGUE_TOTAL_MATCHES: Record<string, number> = {
+  'ENG-1': 38,  // 20 teams
+  'ENG-2': 46,  // 24 teams
+  'ENG-3': 46,
+  'ENG-4': 46,
+  'ESP-1': 38,
+  'DEU-1': 34,  // 18 teams
+  'DEU-2': 34,
+  'ITA-1': 38,
+  'FRA-1': 34,  // 18 teams
+  'NED-1': 34,
+  'PRT-1': 34,
+  'BEL-1': 30,
+  'SCO-1': 33,  // 12 teams × 3 rounds
+  'TUR-1': 36,  // 19 teams
 }
 
 // Build dynamic zone key for the current league
@@ -371,10 +385,33 @@ export default function LeaguePage() {
     return zone ? ZONE_COLOR[zone.type] : 'transparent'
   }
 
+  // True mathematical relegation: team's max attainable points < points of last safe team.
+  // Only applies to teams in the 'relegation' zone (not rel_playoff).
+  function isMathRelegated(pos: number): boolean {
+    const zones = leagueId ? LEAGUE_ZONES[leagueId] : undefined
+    if (!zones) return false
+    const relZone = zones.find(z => z.type === 'relegation')
+    if (!relZone || pos < relZone.from) return false
+
+    const totalMatches = LEAGUE_TOTAL_MATCHES[leagueId ?? ''] ?? 38
+    const team = table[pos - 1]
+    if (!team) return false
+
+    const played    = Number(team.played ?? 0)
+    const remaining = totalMatches - played
+    const maxPts    = Number(team.points ?? 0) + remaining * 3
+
+    // Last safe team is the one just above the relegation zone
+    const safeTeam  = table[relZone.from - 2]  // 0-indexed → relZone.from - 1 - 1
+    if (!safeTeam) return false
+
+    return maxPts < Number(safeTeam.points ?? 0)
+  }
+
   // Row suffix badges: champion crown, relegated R
   function rowBadge(pos: number): string | null {
     if (pos === 1 && table[0]?.played != null && Number(table[0].played) >= 34) return '👑'
-    if (pos > numInLeague - 3 && table[0]?.played != null && Number(table[0].played) >= 34) return 'R'
+    if (isMathRelegated(pos)) return 'R'
     return null
   }
 
