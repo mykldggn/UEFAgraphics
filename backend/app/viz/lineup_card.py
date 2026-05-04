@@ -105,61 +105,12 @@ def _avg_mins(p: dict) -> float:
 
 # ── Within-line ordering ──────────────────────────────────────────────────────
 
-# ── FotMob column hints ───────────────────────────────────────────────────────
-
-def _fotmob_col(p: dict, hints: dict[str, int] | None) -> int | None:
+def _order_def_line(players: list[dict], n_def: int) -> list[dict]:
     """
-    Look up a player's FotMob column position (1=leftmost in row) by last name.
-    Returns None when no hint is available.
+    Orders defenders left → right using avg mins to discriminate CB vs FB.
+    A CB plays full 90s when fit → higher avg_mins.
+    A FB gets rotated / subbed → lower avg_mins.
     """
-    if not hints:
-        return None
-    name = p.get("player", p.get("player_name", ""))
-    last = name.split()[-1].lower() if name else ""
-    # Try exact last name first, then partial match
-    if last in hints:
-        return hints[last]
-    for key, val in hints.items():
-        if last and (last in key or key in last):
-            return val
-    return None
-
-
-def _order_by_fotmob(players: list[dict], hints: dict[str, int] | None) -> list[dict] | None:
-    """
-    If all players in the list have FotMob column hints, return them sorted
-    left-to-right by column.  Returns None if hints are missing for any player.
-    """
-    if not hints:
-        return None
-    cols = [_fotmob_col(p, hints) for p in players]
-    if any(c is None for c in cols):
-        return None
-    return [p for _, p in sorted(zip(cols, players))]  # type: ignore[arg-type]
-
-
-def _order_def_line(players: list[dict], n_def: int,
-                    hints: dict[str, int] | None = None) -> list[dict]:
-    """
-    Orders defenders left → right.
-
-    CB vs FB discrimination uses AVG MINS per game (not total mins).
-    A CB almost always plays the full 90 when fit → high avg_mins.
-    A traditional FB gets rotated / subbed off more → lower avg_mins.
-    This correctly places Hall (LB, lower avg) as the LB and
-    Burn (CB, higher avg) as the left-CB for Newcastle.
-
-    3ATB : sort by avg_mins desc (no lateral logic needed).
-    4/5ATB hybrid ('D M') → flanks, highest avg hybrid → right.
-    1 hybrid : lowest avg pure-D → left FB; rest = CBs sorted avg asc left-right.
-    2 hybrids: each hybrid fills one flank; CBs in centre sorted avg asc.
-    No hybrids: lowest avg pair → FBs (flanks); rest → CBs (centre, avg asc).
-    """
-    # FotMob grid takes priority — it knows actual positions
-    fm_ordered = _order_by_fotmob(players, hints)
-    if fm_ordered is not None:
-        return fm_ordered
-
     if n_def == 3:
         return sorted(players, key=_avg_mins, reverse=True)
 
@@ -197,25 +148,8 @@ def _order_def_line(players: list[dict], n_def: int,
     return left_flank + centre + right_flank
 
 
-def _order_fwd_line(players: list[dict],
-                    hints: dict[str, int] | None = None) -> list[dict]:
-    """
-    Orders forwards left → right.
-
-    When a clear striker is present (first token 'F', no 'M') → centre.
-    Wingers / AMs on flanks: highest-total-mins winger → LEFT (usually the
-    team's primary wide threat, e.g. LW), second → RIGHT.
-
-    When NO clear striker is detected (Understat often tags LW/RW as bare 'F'):
-    Use the lowest-total-mins FWD as the centre forward (strikers rotate more
-    than nailed-down wingers) and place them in the middle slot.
-    For exactly 3 FWDs: [highest-mins, lowest-mins, second-mins]
-    = [LW, CF, RW] which is a reasonable approximation.
-    """
-    fm_ordered = _order_by_fotmob(players, hints)
-    if fm_ordered is not None:
-        return fm_ordered
-
+def _order_fwd_line(players: list[dict]) -> list[dict]:
+    """Orders forwards left → right. Clear strikers → centre, wingers → flanks."""
     strikers = sorted([p for p in players if _is_striker(p)],
                       key=_total_mins, reverse=True)
     wingers  = sorted([p for p in players if not _is_striker(p)],
@@ -327,37 +261,6 @@ def _formation_str(n_def: int, n_mid: int, n_fwd: int) -> str:
 
 # ── Build XI ─────────────────────────────────────────────────────────────────
 
-def _fotmob_row_to_pos(row: int, n_rows: int) -> str:
-    """
-    Convert FotMob lineup row number to position category.
-    row 1      → GK
-    row 2      → DEF
-    row n_rows → FWD  (last row = strikers/forwards)
-    anything between 2 and n_rows → MID
-    n_rows is total number of distinct rows in the lineup (incl. GK row).
-    """
-    if row == 1:
-        return "GK"
-    if row == 2:
-        return "DEF"
-    if row >= n_rows:
-        return "FWD"
-    return "MID"
-
-
-def _lookup_row(p: dict, row_hints: dict[str, int]) -> int | None:
-    """Find a player's FotMob row via last-name lookup (same logic as _fotmob_col)."""
-    name = p.get("player", p.get("player_name", ""))
-    last = name.split()[-1].lower() if name else ""
-    if last and last in row_hints:
-        return row_hints[last]
-    # partial match
-    for key, val in row_hints.items():
-        if last and (last in key or key in last):
-            return val
-    return None
-
-
 def _parse_formation(formation_str: str) -> tuple[int, int, int] | None:
     """
     Parse a formation string into (n_def, n_mid, n_fwd).
@@ -394,31 +297,25 @@ def _lookup_pos(p: dict, pos_hints: dict[str, str]) -> str | None:
 
 def build_xi(
     players: list[dict],
-    fotmob_hints: dict[str, int] | None = None,
-    forced_formation: str | None = None,
-    row_hints: dict[str, int] | None = None,
     pos_hints: dict[str, str] | None = None,
+    forced_formation: str | None = None,
 ) -> tuple[list[dict], str]:
     """
     Returns (xi_with_coords, formation_str).
     Each result dict: player, minutes, position, x, y.
 
-    When forced_formation is provided (e.g. "4-3-3" from a FotMob lineup),
-    that formation is treated as ground truth.  Players are selected:
-      1. GK  — highest-minute goalkeeper
-      2. DEF — top n_def defenders by minutes
-      3. FWD — top n_fwd forwards by minutes
-      4. MID — top n_mid from all remaining outfield players
-    This fills "attacking midfielders" (FWD-classified "F M") naturally into
-    the midfield for 4-2-3-1 / 4-3-3 etc. without any heuristic guards.
-    """
-    MIN_AVG = 45   # exclude pure super-subs
+    pos_hints: {last_name_lower → "GK"/"DEF"/"MID"/"FWD"} from ESPN lineup data.
+    forced_formation: formation string e.g. "4-3-3" from ESPN.
 
-    # ── Pool: players averaging ≥45 min/game ──────────────────────────────────
+    When pos_hints is available, it is used as the primary classifier —
+    distinguishing e.g. Rice (LM→MID) from Timber (RB→DEF) even though
+    both are "D M" in Understat. _strict_pos is only the final fallback.
+    """
+    MIN_AVG = 45
+
     starters = [p for p in players if _avg_mins(p) >= MIN_AVG]
     pool = starters if len(starters) >= 11 else players
 
-    # ── Separate GK ───────────────────────────────────────────────────────────
     gk_pool  = sorted([p for p in pool if _strict_pos(p) == "GK"],
                       key=_total_mins, reverse=True)
     out_pool = sorted([p for p in pool if _strict_pos(p) != "GK"],
@@ -429,31 +326,18 @@ def build_xi(
         xi_gk    = out_pool[:1]
         out_pool = out_pool[1:]
 
-    # ── Forced-formation path (FotMob lineup tells us the real shape) ─────────
+    def _classify(p: dict) -> str:
+        """ESPN pos_hints first (reliable), _strict_pos as last resort."""
+        if pos_hints:
+            pos = _lookup_pos(p, pos_hints)
+            if pos is not None:
+                return pos
+        return _strict_pos(p)
+
+    # ── Forced-formation path (ESPN tells us the real shape) ──────────────────
     parsed = _parse_formation(forced_formation) if forced_formation else None
     if parsed:
         n_def_t, n_mid_t, n_fwd_t = parsed
-        # n_rows = number of lines including GK (e.g. 4-3-3 → 4 rows)
-        n_rows = len([x for x in str(forced_formation).split("-") if x.strip().isdigit()]) + 1
-
-        def _classify(p: dict) -> str:
-            """
-            Priority:
-            1. API-Football pos field (actual match position — most reliable)
-               This correctly distinguishes Rice (DM→MID) from Timber (LB→DEF)
-               even though both have "D M" in Understat.
-            2. API-Football row hint
-            3. Understat _strict_pos (imperfect but safe as last resort)
-            """
-            if pos_hints:
-                ap = _lookup_pos(p, pos_hints)
-                if ap is not None:
-                    return ap
-            if row_hints:
-                row = _lookup_row(p, row_hints)
-                if row is not None:
-                    return _fotmob_row_to_pos(row, n_rows)
-            return _strict_pos(p)
 
         def_pool = sorted([p for p in out_pool if _classify(p) == "DEF"],
                           key=_total_mins, reverse=True)
@@ -463,37 +347,33 @@ def build_xi(
         xi_def = def_pool[:n_def_t]
         xi_fwd = fwd_pool[:n_fwd_t]
 
-        # MID = highest-minute players not already claimed
         used = {id(p) for p in xi_def + xi_fwd}
         remaining = [p for p in out_pool if id(p) not in used]
         xi_mid = remaining[:n_mid_t]
 
-        # If any group is short (row_hints might not cover everyone), pull from leftover
+        # Fill any short groups from leftover
         for _ in range(3):
             used2 = {id(p) for p in xi_def + xi_mid + xi_fwd}
             leftover = [p for p in out_pool if id(p) not in used2]
-            if len(xi_def) < n_def_t and leftover:
+            if not leftover:
+                break
+            if len(xi_def) < n_def_t:
                 xi_def.append(leftover.pop(0))
-            elif len(xi_fwd) < n_fwd_t and leftover:
+            elif len(xi_fwd) < n_fwd_t:
                 xi_fwd.append(leftover.pop(0))
-            elif len(xi_mid) < n_mid_t and leftover:
+            elif len(xi_mid) < n_mid_t:
                 xi_mid.append(leftover.pop(0))
             else:
                 break
-
-        n_def, n_mid, n_fwd = len(xi_def), len(xi_mid), len(xi_fwd)
 
         for p in xi_def: p["_pos_override"] = "DEF"
         for p in xi_mid: p["_pos_override"] = "MID"
         for p in xi_fwd: p["_pos_override"] = "FWD"
 
-        xi_def = sorted(xi_def, key=_total_mins, reverse=True)
-        xi_mid = sorted(xi_mid, key=_total_mins, reverse=True)
-        xi_fwd = sorted(xi_fwd, key=_total_mins, reverse=True)
-
-        def_ordered = _order_def_line(xi_def, n_def, fotmob_hints)
-        mid_ordered = _order_by_fotmob(xi_mid, fotmob_hints) or xi_mid
-        fwd_ordered = _order_fwd_line(xi_fwd, fotmob_hints)
+        n_def, n_mid, n_fwd = len(xi_def), len(xi_mid), len(xi_fwd)
+        def_ordered = _order_def_line(xi_def, n_def)
+        mid_ordered = sorted(xi_mid, key=_total_mins, reverse=True)
+        fwd_ordered = _order_fwd_line(xi_fwd)
 
         xi_ordered = xi_gk + def_ordered + mid_ordered + fwd_ordered
         coords     = _formation_coords(n_def, n_mid, n_fwd, mid_players=mid_ordered)
@@ -508,58 +388,37 @@ def build_xi(
             })
         return result, _formation_str(n_def, n_mid, n_fwd)
 
-    # ── Fallback: heuristic path (Understat / no formation hint) ─────────────
-    # If we have row_hints but no forced formation, still use them for classification
-    # by inferring the formation from the most likely shape (4 rows = 4-X-Y)
-    if (row_hints or pos_hints) and not parsed:
-        # Determine n_rows from the row_hints data (max row value seen)
-        n_rows_inferred = max(row_hints.values(), default=4) if row_hints else 4
-
-        def _classify_heuristic(p: dict) -> str:
-            if pos_hints:
-                ap = _lookup_pos(p, pos_hints)
-                if ap is not None:
-                    return ap
-            if row_hints:
-                row = _lookup_row(p, row_hints)
-                if row is not None:
-                    return _fotmob_row_to_pos(row, n_rows_inferred)
-            return _strict_pos(p)
-
+    # ── Fallback: pos_hints available but no forced formation ─────────────────
+    if pos_hints:
         xi_out = list(out_pool[:10])
-        xi_def = sorted([p for p in xi_out if _classify_heuristic(p) == "DEF"], key=_total_mins, reverse=True)
-        xi_mid = sorted([p for p in xi_out if _classify_heuristic(p) == "MID"], key=_total_mins, reverse=True)
-        xi_fwd = sorted([p for p in xi_out if _classify_heuristic(p) == "FWD"], key=_total_mins, reverse=True)
-
+        xi_def = sorted([p for p in xi_out if _classify(p) == "DEF"], key=_total_mins, reverse=True)
+        xi_mid = sorted([p for p in xi_out if _classify(p) == "MID"], key=_total_mins, reverse=True)
+        xi_fwd = sorted([p for p in xi_out if _classify(p) == "FWD"], key=_total_mins, reverse=True)
         n_def, n_mid, n_fwd = len(xi_def), len(xi_mid), len(xi_fwd)
-        def_ordered = _order_def_line(xi_def, n_def, fotmob_hints)
-        mid_ordered = _order_by_fotmob(xi_mid, fotmob_hints) or xi_mid
-        fwd_ordered = _order_fwd_line(xi_fwd, fotmob_hints)
-        xi_ordered  = xi_gk + def_ordered + mid_ordered + fwd_ordered
-        coords      = _formation_coords(n_def, n_mid, n_fwd, mid_players=mid_ordered)
+        xi_ordered = xi_gk + _order_def_line(xi_def, n_def) + xi_mid + _order_fwd_line(xi_fwd)
+        coords = _formation_coords(n_def, n_mid, n_fwd, mid_players=xi_mid)
         result = []
         for player, (x, y) in zip(xi_ordered, coords):
             result.append({
                 "player":   player.get("player", player.get("player_name", "?")),
                 "minutes":  int(_total_mins(player)),
-                "position": _classify_heuristic(player),
+                "position": _classify(player),
                 "x": x, "y": y,
             })
         return result, _formation_str(n_def, n_mid, n_fwd)
 
-    # Take top 10 outfield by total minutes
+    # ── Pure Understat fallback (no ESPN data) ────────────────────────────────
     xi_out = list(out_pool[:10])
 
-    # 5ATB guard: only keep >4 DEFs when ≥2 are hybrids (genuine wing-back)
+    # 5ATB guard
     for _ in range(2):
-        defs_in_xi   = [p for p in xi_out if _strict_pos(p) == "DEF"]
-        n_hyb_in_xi  = sum(1 for p in defs_in_xi if _is_hybrid_def(p))
-        if len(defs_in_xi) > 4 and n_hyb_in_xi < 2:
+        defs_in_xi  = [p for p in xi_out if _strict_pos(p) == "DEF"]
+        n_hyb       = sum(1 for p in defs_in_xi if _is_hybrid_def(p))
+        if len(defs_in_xi) > 4 and n_hyb < 2:
             worst_def  = min(defs_in_xi, key=_total_mins)
             xi_out.remove(worst_def)
             xi_ids     = {id(p) for p in xi_out}
-            candidates = [p for p in out_pool
-                          if id(p) not in xi_ids and _strict_pos(p) != "DEF"]
+            candidates = [p for p in out_pool if id(p) not in xi_ids and _strict_pos(p) != "DEF"]
             if not candidates:
                 candidates = [p for p in out_pool if id(p) not in xi_ids]
             if candidates:
@@ -567,16 +426,12 @@ def build_xi(
         else:
             break
 
-    # FWD overcounting guard: demote lowest-minute hybrid FWDs to MID
-    def _is_hybrid_fwd(p: dict) -> bool:
-        toks = set(_tokens(p))
-        return "F" in toks and "M" in toks
-
+    # FWD overcounting guard
     for _ in range(3):
-        fwds_in_xi = [p for p in xi_out if _strict_pos(p) == "FWD"]
-        if len(fwds_in_xi) <= 3:
+        fwds = [p for p in xi_out if _strict_pos(p) == "FWD"]
+        if len(fwds) <= 3:
             break
-        hybrids = [p for p in fwds_in_xi if _is_hybrid_fwd(p)]
+        hybrids = [p for p in fwds if set(_tokens(p)) & {"F", "M"} == {"F", "M"}]
         if not hybrids:
             break
         min(hybrids, key=_total_mins)["_pos_override"] = "MID"
@@ -587,12 +442,11 @@ def build_xi(
     xi_def = sorted([p for p in xi_out if _effective_pos(p) == "DEF"], key=_total_mins, reverse=True)
     xi_mid = sorted([p for p in xi_out if _effective_pos(p) == "MID"], key=_total_mins, reverse=True)
     xi_fwd = sorted([p for p in xi_out if _effective_pos(p) == "FWD"], key=_total_mins, reverse=True)
-
     n_def, n_mid, n_fwd = len(xi_def), len(xi_mid), len(xi_fwd)
 
-    def_ordered = _order_def_line(xi_def, n_def, fotmob_hints)
-    mid_ordered = _order_by_fotmob(xi_mid, fotmob_hints) or xi_mid
-    fwd_ordered = _order_fwd_line(xi_fwd, fotmob_hints)
+    def_ordered = _order_def_line(xi_def, n_def)
+    mid_ordered = xi_mid
+    fwd_ordered = _order_fwd_line(xi_fwd)
 
     xi_ordered = xi_gk + def_ordered + mid_ordered + fwd_ordered
     coords     = _formation_coords(n_def, n_mid, n_fwd, mid_players=mid_ordered)
@@ -616,8 +470,6 @@ def render(
     league_label:     str,
     players:          list[dict],
     manager:          str = "",
-    fotmob_hints:     dict[str, int] | None = None,
-    row_hints:        dict[str, int] | None = None,
     pos_hints:        dict[str, str] | None = None,
     forced_formation: str | None = None,
 ) -> bytes:

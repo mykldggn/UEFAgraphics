@@ -99,12 +99,13 @@ def get_team_id(team_name: str, internal_league_id: str, season: int) -> int | N
     if not af_league_id:
         return None
 
-    # Try requested season first, fall back to previous season (free plan caps at 2024)
-    resp = _get("teams", {"name": team_name, "league": af_league_id, "season": season})
+    # Try previous season first (free plan caps at 2024; team IDs are stable across seasons)
+    for s in [season - 1, season - 2]:
+        resp = _get("teams", {"name": team_name, "league": af_league_id, "season": s})
+        if resp:
+            break
     if not resp:
-        resp = _get("teams", {"name": team_name, "league": af_league_id, "season": season - 1})
-    if not resp:
-        # Try broader name search
+        # Broad search without season filter as last resort
         resp = _get("teams", {"search": team_name[:6]})
 
     if not resp:
@@ -130,7 +131,9 @@ def get_recent_fixture_ids(af_team_id: int, season: int, last: int = 8) -> list[
     """
     Get the `last` most recent completed fixture IDs for a team in a season.
     Falls back to season-1 if free plan blocks the requested season.
-    Cached 6 h (list changes as season progresses).
+    Does NOT use the `last` API parameter (paid-only) — fetches all FT fixtures
+    for the season and slices the most recent N locally.
+    Cached 6 h.
     """
     for s in [season, season - 1]:
         ck = {"team_id": af_team_id, "season": s, "last": last}
@@ -138,10 +141,19 @@ def get_recent_fixture_ids(af_team_id: int, season: int, last: int = 8) -> list[
         if cached is not None:
             return cached
 
-        resp = _get("fixtures", {"team": af_team_id, "season": s,
-                                  "last": last, "status": "FT"})
+        # Free plan: no `last` param — fetch all FT fixtures, sort by date, take last N
+        resp = _get("fixtures", {"team": af_team_id, "season": s, "status": "FT"})
         if resp:
-            ids = [f["fixture"]["id"] for f in resp if f.get("fixture", {}).get("id")]
+            # Sort by date ascending, take last N
+            sorted_fixtures = sorted(
+                resp,
+                key=lambda f: f.get("fixture", {}).get("date", ""),
+            )
+            ids = [
+                f["fixture"]["id"]
+                for f in sorted_fixtures[-last:]
+                if f.get("fixture", {}).get("id")
+            ]
             cache.json_save("apifootball_fixtures", ck, ids)
             return ids
 
