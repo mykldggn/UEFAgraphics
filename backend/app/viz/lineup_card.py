@@ -259,6 +259,94 @@ def _formation_str(n_def: int, n_mid: int, n_fwd: int) -> str:
     return f"{n_def}-{n_mid}-{n_fwd}"
 
 
+# ── ESPN position helpers ─────────────────────────────────────────────────────
+
+import unicodedata as _ud
+
+def _norm(s: str) -> str:
+    return _ud.normalize("NFD", s).encode("ascii", "ignore").decode("ascii").lower()
+
+# Raw ESPN abbreviation → GK/DEF/MID/FWD category
+_ESPN_CAT: dict[str, str] = {
+    "G": "GK", "GK": "GK",
+    "D": "DEF", "CB": "DEF", "CD": "DEF", "CD-L": "DEF", "CD-R": "DEF",
+    "LB": "DEF", "RB": "DEF", "LWB": "DEF", "RWB": "DEF", "SW": "DEF",
+    "M": "MID", "CM": "MID", "DM": "MID", "CDM": "MID",
+    "LM": "MID", "RM": "MID", "AM": "MID", "CAM": "MID",
+    "F": "FWD", "LF": "FWD", "RF": "FWD", "CF": "FWD",
+    "ST": "FWD", "LW": "FWD", "RW": "FWD", "SS": "FWD",
+}
+
+def _espn_side(abbr: str) -> str:
+    """L / C / R from ESPN position abbreviation."""
+    if not abbr:
+        return "C"
+    if abbr[0] == "L":
+        return "L"
+    if abbr[0] == "R":
+        return "R"
+    return "C"
+
+def _lookup_espn_abbr(p: dict, pos_hints: dict[str, str]) -> str | None:
+    """Return raw ESPN position abbreviation for a player via normalised last-name lookup."""
+    name = p.get("player", p.get("player_name", ""))
+    last = _norm(name.split()[-1]) if name else ""
+    if last and last in pos_hints:
+        return pos_hints[last]
+    for key, val in pos_hints.items():
+        if last and (last in key or key in last):
+            return val
+    return None
+
+def _order_line_by_side(players: list[dict], pos_hints: dict[str, str]) -> list[dict]:
+    """
+    Sort players left → right using ESPN lateral position hints.
+    Falls back to current order if hints not available.
+    """
+    def _side_key(p: dict) -> int:
+        abbr = _lookup_espn_abbr(p, pos_hints) or ""
+        s = _espn_side(abbr)
+        return {"L": 0, "C": 1, "R": 2}[s]
+
+    # Only reorder if we have hints for all players
+    if all(_lookup_espn_abbr(p, pos_hints) for p in players):
+        return sorted(players, key=_side_key)
+    return players
+
+
+def _select_def_xi(def_pool: list[dict], n_def: int,
+                   pos_hints: dict[str, str]) -> list[dict]:
+    """
+    Select n_def defenders with formation-aware slot filling:
+    For 4-back: 1 LB + 2 CB + 1 RB (avoids picking 2 LBs when 2 LBs are available)
+    For 3-back: 3 CBs
+    Falls back to top-N by minutes if hints insufficient.
+    """
+    if not pos_hints or n_def not in (3, 4, 5):
+        return def_pool[:n_def]
+
+    lbs  = [p for p in def_pool if _espn_side(_lookup_espn_abbr(p, pos_hints) or "") == "L"]
+    rbs  = [p for p in def_pool if _espn_side(_lookup_espn_abbr(p, pos_hints) or "") == "R"]
+    cbs  = [p for p in def_pool if _espn_side(_lookup_espn_abbr(p, pos_hints) or "") == "C"]
+
+    if n_def == 3:
+        slot_l, slot_c, slot_r = 0, 3, 0
+    elif n_def == 4:
+        slot_l, slot_c, slot_r = 1, 2, 1
+    else:  # 5
+        slot_l, slot_c, slot_r = 1, 3, 1
+
+    chosen = lbs[:slot_l] + cbs[:slot_c] + rbs[:slot_r]
+
+    # If any slot is underfilled (e.g. no RB data), top up from remaining pool
+    used = {id(p) for p in chosen}
+    leftover = [p for p in def_pool if id(p) not in used]
+    while len(chosen) < n_def and leftover:
+        chosen.append(leftover.pop(0))
+
+    return chosen
+
+
 # ── Build XI ─────────────────────────────────────────────────────────────────
 
 def _parse_formation(formation_str: str) -> tuple[int, int, int] | None:
@@ -284,15 +372,11 @@ def _parse_formation(formation_str: str) -> tuple[int, int, int] | None:
 
 
 def _lookup_pos(p: dict, pos_hints: dict[str, str]) -> str | None:
-    """Look up a player's API-Football position by last name."""
-    name = p.get("player", p.get("player_name", ""))
-    last = name.split()[-1].lower() if name else ""
-    if last and last in pos_hints:
-        return pos_hints[last]
-    for key, val in pos_hints.items():
-        if last and (last in key or key in last):
-            return val
-    return None
+    """Return GK/DEF/MID/FWD category for a player via ESPN pos_hints."""
+    abbr = _lookup_espn_abbr(p, pos_hints)
+    if abbr is None:
+        return None
+    return _ESPN_CAT.get(abbr, "MID")
 
 
 def build_xi(
@@ -344,7 +428,8 @@ def build_xi(
         fwd_pool = sorted([p for p in out_pool if _classify(p) == "FWD"],
                           key=_total_mins, reverse=True)
 
-        xi_def = def_pool[:n_def_t]
+        # Smart DEF selection: 1 LB + 2 CB + 1 RB (avoids 2 LBs in back 4)
+        xi_def = _select_def_xi(def_pool, n_def_t, pos_hints or {})
         xi_fwd = fwd_pool[:n_fwd_t]
 
         used = {id(p) for p in xi_def + xi_fwd}
@@ -371,9 +456,15 @@ def build_xi(
         for p in xi_fwd: p["_pos_override"] = "FWD"
 
         n_def, n_mid, n_fwd = len(xi_def), len(xi_mid), len(xi_fwd)
-        def_ordered = _order_def_line(xi_def, n_def)
-        mid_ordered = sorted(xi_mid, key=_total_mins, reverse=True)
-        fwd_ordered = _order_fwd_line(xi_fwd)
+        # Use ESPN lateral hints for L→C→R ordering, fall back to heuristics
+        if pos_hints:
+            def_ordered = _order_line_by_side(xi_def, pos_hints)
+            mid_ordered = _order_line_by_side(xi_mid, pos_hints)
+            fwd_ordered = _order_line_by_side(xi_fwd, pos_hints)
+        else:
+            def_ordered = _order_def_line(xi_def, n_def)
+            mid_ordered = sorted(xi_mid, key=_total_mins, reverse=True)
+            fwd_ordered = _order_fwd_line(xi_fwd)
 
         xi_ordered = xi_gk + def_ordered + mid_ordered + fwd_ordered
         coords     = _formation_coords(n_def, n_mid, n_fwd, mid_players=mid_ordered)
@@ -391,11 +482,12 @@ def build_xi(
     # ── Fallback: pos_hints available but no forced formation ─────────────────
     if pos_hints:
         xi_out = list(out_pool[:10])
-        xi_def = sorted([p for p in xi_out if _classify(p) == "DEF"], key=_total_mins, reverse=True)
+        def_pool_h = sorted([p for p in xi_out if _classify(p) == "DEF"], key=_total_mins, reverse=True)
+        xi_def = _select_def_xi(def_pool_h, len(def_pool_h), pos_hints)
         xi_mid = sorted([p for p in xi_out if _classify(p) == "MID"], key=_total_mins, reverse=True)
         xi_fwd = sorted([p for p in xi_out if _classify(p) == "FWD"], key=_total_mins, reverse=True)
         n_def, n_mid, n_fwd = len(xi_def), len(xi_mid), len(xi_fwd)
-        xi_ordered = xi_gk + _order_def_line(xi_def, n_def) + xi_mid + _order_fwd_line(xi_fwd)
+        xi_ordered = xi_gk + _order_line_by_side(xi_def, pos_hints) + _order_line_by_side(xi_mid, pos_hints) + _order_line_by_side(xi_fwd, pos_hints)
         coords = _formation_coords(n_def, n_mid, n_fwd, mid_players=xi_mid)
         result = []
         for player, (x, y) in zip(xi_ordered, coords):

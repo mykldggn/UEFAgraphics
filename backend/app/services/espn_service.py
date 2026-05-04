@@ -38,41 +38,11 @@ ESPN_LEAGUES: dict[str, str] = {
     "TUR-1": "tur.1",
 }
 
-# ESPN position abbreviation → our position category
-# Detailed positions let us correctly classify DM, LM, RM as MID etc.
-_POS_MAP: dict[str, str] = {
-    "G":    "GK",
-    "GK":   "GK",
-    # Defenders
-    "D":    "DEF",
-    "CB":   "DEF",
-    "CD":   "DEF",
-    "CD-L": "DEF",
-    "CD-R": "DEF",
-    "LB":   "DEF",
-    "RB":   "DEF",
-    "LWB":  "DEF",
-    "RWB":  "DEF",
-    "SW":   "DEF",
-    # Midfielders — all mid variants go here
-    "M":    "MID",
-    "CM":   "MID",
-    "DM":   "MID",
-    "LM":   "MID",
-    "RM":   "MID",
-    "AM":   "MID",
-    "CAM":  "MID",
-    "CDM":  "MID",
-    # Forwards
-    "F":    "FWD",
-    "LF":   "FWD",
-    "RF":   "FWD",
-    "CF":   "FWD",
-    "ST":   "FWD",
-    "LW":   "FWD",
-    "RW":   "FWD",
-    "SS":   "FWD",
-}
+import unicodedata
+
+def _normalize(s: str) -> str:
+    """Normalize Unicode to ASCII for name matching (ø→o, é→e, ü→u etc.)"""
+    return unicodedata.normalize("NFD", s).encode("ascii", "ignore").decode("ascii").lower()
 
 _session: requests.Session | None = None
 
@@ -194,8 +164,8 @@ def _pick_team(rosters: list, team_name: str) -> dict | None:
             continue
         name = p.get("athlete", {}).get("displayName", "")
         pos_abbr = p.get("position", {}).get("abbreviation", "")
-        pos = _POS_MAP.get(pos_abbr, "MID")
-        players.append({"name": name, "pos": pos})
+        # Store raw ESPN abbreviation (LB, RB, CM, LM etc.) — lineup_card does the mapping
+        players.append({"name": name, "pos": pos_abbr})
 
     return {"formation": formation, "players": players}
 
@@ -239,7 +209,8 @@ def get_team_lineup_hints(
             formations[lineup["formation"]] += 1
         for p in lineup.get("players", []):
             name = p.get("name", "")
-            last = name.split()[-1].lower() if name else ""
+            # Normalize to ASCII so "Ødegaard" → "odegaard" matches Understat "Odegaard"
+            last = _normalize(name.split()[-1]) if name else ""
             pos  = p.get("pos", "")
             if last and pos:
                 pos_votes[last].append(pos)
