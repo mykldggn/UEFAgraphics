@@ -376,11 +376,24 @@ def _parse_formation(formation_str: str) -> tuple[int, int, int] | None:
     return n_def, n_mid, n_fwd
 
 
+def _lookup_pos(p: dict, pos_hints: dict[str, str]) -> str | None:
+    """Look up a player's API-Football position by last name."""
+    name = p.get("player", p.get("player_name", ""))
+    last = name.split()[-1].lower() if name else ""
+    if last and last in pos_hints:
+        return pos_hints[last]
+    for key, val in pos_hints.items():
+        if last and (last in key or key in last):
+            return val
+    return None
+
+
 def build_xi(
     players: list[dict],
     fotmob_hints: dict[str, int] | None = None,
     forced_formation: str | None = None,
     row_hints: dict[str, int] | None = None,
+    pos_hints: dict[str, str] | None = None,
 ) -> tuple[list[dict], str]:
     """
     Returns (xi_with_coords, formation_str).
@@ -420,7 +433,16 @@ def build_xi(
         n_rows = len([x for x in str(forced_formation).split("-") if x.strip().isdigit()]) + 1
 
         def _classify(p: dict) -> str:
-            """Use FotMob row_hints when available, else fall back to _strict_pos."""
+            """
+            Priority:
+            1. API-Football pos field (actual match position — most reliable)
+            2. API-Football row hint (inferred from grid row number)
+            3. Understat position string (last resort)
+            """
+            if pos_hints:
+                ap = _lookup_pos(p, pos_hints)
+                if ap is not None:
+                    return ap
             if row_hints:
                 row = _lookup_row(p, row_hints)
                 if row is not None:
@@ -483,11 +505,15 @@ def build_xi(
     # ── Fallback: heuristic path (Understat / no formation hint) ─────────────
     # If we have row_hints but no forced formation, still use them for classification
     # by inferring the formation from the most likely shape (4 rows = 4-X-Y)
-    if row_hints and not parsed:
+    if (row_hints or pos_hints) and not parsed:
         # Determine n_rows from the row_hints data (max row value seen)
-        n_rows_inferred = max(row_hints.values(), default=4)
+        n_rows_inferred = max(row_hints.values(), default=4) if row_hints else 4
 
         def _classify_heuristic(p: dict) -> str:
+            if pos_hints:
+                ap = _lookup_pos(p, pos_hints)
+                if ap is not None:
+                    return ap
             if row_hints:
                 row = _lookup_row(p, row_hints)
                 if row is not None:
@@ -586,6 +612,7 @@ def render(
     manager:          str = "",
     fotmob_hints:     dict[str, int] | None = None,
     row_hints:        dict[str, int] | None = None,
+    pos_hints:        dict[str, str] | None = None,
     forced_formation: str | None = None,
 ) -> bytes:
     font    = get_font()
@@ -595,7 +622,7 @@ def render(
         return _no_data_png(team_name, season_label, font)
 
     xi, formation = build_xi(players, fotmob_hints=fotmob_hints,
-                             row_hints=row_hints,
+                             row_hints=row_hints, pos_hints=pos_hints,
                              forced_formation=forced_formation)
     if not xi:
         return _no_data_png(team_name, season_label, font)

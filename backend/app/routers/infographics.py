@@ -507,8 +507,8 @@ def team_lineup_players(
     us_slug      = understat.LEAGUE_TO_US.get(league_id)
     fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id)
 
-    # Fetch API-Football lineup hints (formation + row/col) — works for any league
-    col_hints, row_hints, formation_hint = apifb.get_team_lineup_hints(
+    # Fetch API-Football lineup hints (formation + row/col/pos) — works for any league
+    col_hints, row_hints, pos_hints, formation_hint = apifb.get_team_lineup_hints(
         team_name, league_id, season)
 
     if us_slug:
@@ -520,7 +520,7 @@ def team_lineup_players(
             return {"players": [], "formation": ""}
         xi, formation = lineup_viz.build_xi(
             players, fotmob_hints=col_hints,
-            row_hints=row_hints, forced_formation=formation_hint)
+            row_hints=row_hints, pos_hints=pos_hints, forced_formation=formation_hint)
         player_pool = understat.get_league_player_stats(us_slug, season)
         id_map = {p["player"]: p["id"] for p in player_pool}
         return {
@@ -544,7 +544,7 @@ def team_lineup_players(
                 return {"players": [], "formation": ""}
             xi, formation = lineup_viz.build_xi(
                 team_pl, fotmob_hints=col_hints,
-                row_hints=row_hints, forced_formation=formation_hint)
+                row_hints=row_hints, pos_hints=pos_hints, forced_formation=formation_hint)
             return {
                 "players": [
                     {"player": p["player"], "position": p["position"],
@@ -567,7 +567,7 @@ def team_lineup(
     league_id: str = Query(...),
     season:    int = Query(...),
 ):
-    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 14}
+    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 15}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
@@ -596,8 +596,8 @@ def team_lineup(
         png = lineup_viz._no_data_png(team_name, "Lineup data unavailable", get_font())
         return _png(png)
 
-    # API-Football lineup hints — formation + row/col positions
-    col_hints, row_hints, formation_hint = apifb.get_team_lineup_hints(
+    # API-Football lineup hints — formation + row/col/pos positions
+    col_hints, row_hints, pos_hints, formation_hint = apifb.get_team_lineup_hints(
         team_name, league_id, season)
 
     manager = fdorg.get_team_coach(team_id) if team_id.isdigit() else ""
@@ -610,6 +610,7 @@ def team_lineup(
         manager          = manager,
         fotmob_hints     = col_hints,
         row_hints        = row_hints,
+        pos_hints        = pos_hints,
         forced_formation = formation_hint,
     )
     cache.img_save("infographic", ck, png)

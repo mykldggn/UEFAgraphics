@@ -212,32 +212,36 @@ def get_team_lineup_hints(
     internal_league_id: str,
     season: int,
     num_matches: int = 8,
-) -> tuple[dict[str, int] | None, dict[str, int] | None, str | None]:
+) -> tuple[dict[str, int] | None, dict[str, int] | None, dict[str, str] | None, str | None]:
     """
     Aggregate lineup data across recent matches.
-    Returns (col_hints, row_hints, formation_str) — same shape as the old
-    _fotmob_lineup_data() helper.
+    Returns (col_hints, row_hints, pos_hints, formation_str).
 
     col_hints  — {last_name_lower: most_common_col_number}
     row_hints  — {last_name_lower: most_common_row_number}
+    pos_hints  — {last_name_lower: most_common_position "GK"/"DEF"/"MID"/"FWD"}
     formation  — most common formation string e.g. "4-3-3"
 
-    Returns (None, None, None) if API key not set or no data available.
+    pos_hints is the most reliable signal — it's the actual position API-Football
+    listed each player at, not an inferred value.
+
+    Returns (None, None, None, None) if API key not set or no data available.
     """
     if not API_KEY:
-        return None, None, None
+        return None, None, None, None
 
     af_team_id = get_team_id(team_name, internal_league_id, season)
     if not af_team_id:
         logger.debug("api-football: could not resolve team ID for %s", team_name)
-        return None, None, None
+        return None, None, None, None
 
     fixture_ids = get_recent_fixture_ids(af_team_id, season, last=num_matches)
     if not fixture_ids:
-        return None, None, None
+        return None, None, None, None
 
     col_votes: dict[str, list[int]]  = defaultdict(list)
     row_votes: dict[str, list[int]]  = defaultdict(list)
+    pos_votes: dict[str, list[str]]  = defaultdict(list)
     formations: Counter              = Counter()
 
     for fid in fixture_ids:
@@ -251,16 +255,20 @@ def get_team_lineup_hints(
             last = name.split()[-1].lower() if name else ""
             row  = p.get("row", 0)
             col  = p.get("col", 0)
+            pos  = p.get("pos", "")   # already mapped to GK/DEF/MID/FWD
             if last and row:
                 row_votes[last].append(row)
             if last and col:
                 col_votes[last].append(col)
+            if last and pos:
+                pos_votes[last].append(pos)
 
     if not row_votes:
-        return None, None, None
+        return None, None, None, None
 
     col_hints = {k: Counter(v).most_common(1)[0][0] for k, v in col_votes.items()} or None
     row_hints = {k: Counter(v).most_common(1)[0][0] for k, v in row_votes.items()} or None
+    pos_hints = {k: Counter(v).most_common(1)[0][0] for k, v in pos_votes.items()} or None
     formation = formations.most_common(1)[0][0] if formations else None
 
-    return col_hints, row_hints, formation
+    return col_hints, row_hints, pos_hints, formation
