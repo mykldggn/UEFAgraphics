@@ -52,6 +52,22 @@ def _tokens(p: dict) -> list[str]:
     return [t for t in p.get("position", "").upper().split() if t not in ("S", "")]
 
 
+def _is_pure_def(p: dict) -> bool:
+    """
+    True only for players with NO midfield/forward component.
+    "D" or "D S" → True (pure CB or FB)
+    "D M", "M D", "DM" → False (DM, box-to-box, inverted FB — play in midfield)
+    """
+    toks = _tokens(p)
+    tok_set = set(toks)
+    if "GK" in tok_set or "F" in tok_set or "AM" in tok_set:
+        return False
+    if "D" not in tok_set:
+        return False
+    # Any midfield component → not a pure defender
+    return "M" not in tok_set and "DM" not in tok_set
+
+
 def _strict_pos(p: dict) -> str:
     """
     Single unambiguous position category.
@@ -437,7 +453,11 @@ def build_xi(
             Priority:
             1. API-Football pos field (actual match position — most reliable)
             2. API-Football row hint (inferred from grid row number)
-            3. Understat position string (last resort)
+            3. Conservative Understat fallback:
+               - FWD: any F or AM token
+               - DEF: ONLY if no midfield component (pure D, no M/DM)
+               - MID: everything else, including D M, DM, M D, M
+               This prevents DMs like Rice (D M) from landing in the back 4.
             """
             if pos_hints:
                 ap = _lookup_pos(p, pos_hints)
@@ -447,7 +467,15 @@ def build_xi(
                 row = _lookup_row(p, row_hints)
                 if row is not None:
                     return _fotmob_row_to_pos(row, n_rows)
-            return _strict_pos(p)
+            toks = _tokens(p)
+            tok_set = set(toks)
+            if "GK" in tok_set:
+                return "GK"
+            if "F" in tok_set or "AM" in tok_set:
+                return "FWD"
+            if _is_pure_def(p):
+                return "DEF"
+            return "MID"
 
         def_pool = sorted([p for p in out_pool if _classify(p) == "DEF"],
                           key=_total_mins, reverse=True)
@@ -518,7 +546,12 @@ def build_xi(
                 row = _lookup_row(p, row_hints)
                 if row is not None:
                     return _fotmob_row_to_pos(row, n_rows_inferred)
-            return _strict_pos(p)
+            toks = _tokens(p)
+            tok_set = set(toks)
+            if "GK" in tok_set: return "GK"
+            if "F" in tok_set or "AM" in tok_set: return "FWD"
+            if _is_pure_def(p): return "DEF"
+            return "MID"
 
         xi_out = list(out_pool[:10])
         xi_def = sorted([p for p in xi_out if _classify_heuristic(p) == "DEF"], key=_total_mins, reverse=True)

@@ -87,6 +87,7 @@ def _get(path: str, params: dict | None = None) -> Any:
 def get_team_id(team_name: str, internal_league_id: str, season: int) -> int | None:
     """
     Resolve API-Football team ID from team name + league.
+    Free plan only supports up to season 2024 — falls back to season-1 automatically.
     Cached 30 days (team IDs don't change).
     """
     ck = {"q": team_name.lower().strip(), "league": internal_league_id, "season": season}
@@ -98,7 +99,10 @@ def get_team_id(team_name: str, internal_league_id: str, season: int) -> int | N
     if not af_league_id:
         return None
 
+    # Try requested season first, fall back to previous season (free plan caps at 2024)
     resp = _get("teams", {"name": team_name, "league": af_league_id, "season": season})
+    if not resp:
+        resp = _get("teams", {"name": team_name, "league": af_league_id, "season": season - 1})
     if not resp:
         # Try broader name search
         resp = _get("teams", {"search": team_name[:6]})
@@ -125,21 +129,23 @@ def get_team_id(team_name: str, internal_league_id: str, season: int) -> int | N
 def get_recent_fixture_ids(af_team_id: int, season: int, last: int = 8) -> list[int]:
     """
     Get the `last` most recent completed fixture IDs for a team in a season.
+    Falls back to season-1 if free plan blocks the requested season.
     Cached 6 h (list changes as season progresses).
     """
-    ck = {"team_id": af_team_id, "season": season, "last": last}
-    cached = cache.json_get("apifootball_fixtures", ck, ttl_hours=6)
-    if cached is not None:
-        return cached
+    for s in [season, season - 1]:
+        ck = {"team_id": af_team_id, "season": s, "last": last}
+        cached = cache.json_get("apifootball_fixtures", ck, ttl_hours=6)
+        if cached is not None:
+            return cached
 
-    resp = _get("fixtures", {"team": af_team_id, "season": season,
-                              "last": last, "status": "FT"})
-    if not resp:
-        return []
+        resp = _get("fixtures", {"team": af_team_id, "season": s,
+                                  "last": last, "status": "FT"})
+        if resp:
+            ids = [f["fixture"]["id"] for f in resp if f.get("fixture", {}).get("id")]
+            cache.json_save("apifootball_fixtures", ck, ids)
+            return ids
 
-    ids = [f["fixture"]["id"] for f in resp if f.get("fixture", {}).get("id")]
-    cache.json_save("apifootball_fixtures", ck, ids)
-    return ids
+    return []
 
 
 def get_fixture_lineup(fixture_id: int, team_name: str) -> dict | None:
