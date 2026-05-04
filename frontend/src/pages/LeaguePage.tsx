@@ -633,7 +633,7 @@ export default function LeaguePage() {
                                 width: 7, height: 7, borderRadius: '50%',
                                 background: String(p.stroke), flexShrink: 0,
                               }} />
-                              <span style={{ color: '#e6e9f4', flex: 1 }}>{p.dataKey}</span>
+                              <span style={{ color: '#e6e9f4', flex: 1 }}>{String(p.dataKey)}</span>
                               <span style={{
                                 fontFamily: '"Bebas Neue", sans-serif',
                                 fontSize: 14, color: '#c9a84c', marginLeft: 8,
