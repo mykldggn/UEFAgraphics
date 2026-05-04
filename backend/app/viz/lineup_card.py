@@ -479,8 +479,7 @@ def render(
     if not players:
         return _no_data_png(team_name, season_label, font)
 
-    xi, formation = build_xi(players, fotmob_hints=fotmob_hints,
-                             row_hints=row_hints, pos_hints=pos_hints,
+    xi, formation = build_xi(players, pos_hints=pos_hints,
                              forced_formation=forced_formation)
     if not xi:
         return _no_data_png(team_name, season_label, font)
