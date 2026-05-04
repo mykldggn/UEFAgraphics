@@ -567,7 +567,7 @@ def team_lineup(
     league_id: str = Query(...),
     season:    int = Query(...),
 ):
-    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 16}
+    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 17}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
