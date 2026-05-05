@@ -125,13 +125,61 @@ def get_recent_event_ids(espn_team_id: str, league_slug: str, last: int = 8) -> 
     return ids
 
 
+def _derive_pos(formation: str, place: int | None, espn_abbr: str) -> str:
+    """
+    Combine ESPN formationPlace (1-11) + formation string to produce a precise
+    position label for multi-layer formations.
+
+    - GK / DEF / FWD layers: return espn_abbr unchanged (keep LB/RB/CB/LW/CF/RW).
+    - First mid layer in a multi-layer formation (4-2-3-1, 4-1-4-1, 3-4-3 etc.):
+      always return "DM" regardless of what ESPN generically calls it.
+    - Subsequent mid layers: return ESPN lateral tag (LM/RM/CAM/AM) when specific,
+      otherwise "AM".
+    - Single-layer formations (4-3-3, 3-5-2): return espn_abbr unchanged.
+    """
+    if not place or not formation:
+        return espn_abbr
+    try:
+        parts = [int(x) for x in formation.split("-") if x.strip().isdigit()]
+    except (ValueError, AttributeError):
+        return espn_abbr
+    if not parts or sum(parts) != 10:
+        return espn_abbr
+
+    if place == 1:
+        return espn_abbr  # GK
+
+    idx = place - 2  # 0-based among outfield players
+
+    if idx < parts[0]:
+        return espn_abbr  # DEF layer: keep LB/RB/CB etc.
+    idx -= parts[0]
+
+    mid_parts = parts[1:-1] if len(parts) > 2 else []
+    if not mid_parts:
+        return espn_abbr  # Single mid layer (4-3-3): keep as-is
+
+    # Multi-layer mid: first layer = DM, rest = AM
+    if idx < mid_parts[0]:
+        return "DM"
+    idx -= mid_parts[0]
+
+    _lateral = {"LM", "RM", "CAM", "AM", "LW", "RW"}
+    for layer_count in mid_parts[1:]:
+        if idx < layer_count:
+            return espn_abbr if espn_abbr in _lateral else "AM"
+        idx -= layer_count
+
+    return espn_abbr  # FWD layer: keep LW/CF/RW
+
+
 def get_event_lineup(event_id: str, team_name: str, league_slug: str) -> dict | None:
     """
     Return lineup for one team in a match.
     Shape: {"formation": "4-3-3", "players": [{"name": "Rice", "pos": "MID"}, ...]}
     Cached indefinitely (past matches don't change).
     """
-    ck = {"event_id": event_id, "v": 2}
+    ck = {"event_id": event_id, "v": 3}
     cached = cache.json_get("espn_lineup", ck, ttl_hours=24 * 365)
     if cached is not None:
         return _pick_team(cached, team_name)
@@ -165,8 +213,8 @@ def _pick_team(rosters: list, team_name: str) -> dict | None:
             continue
         name = html.unescape(p.get("athlete", {}).get("displayName", ""))
         pos_abbr = p.get("position", {}).get("abbreviation", "")
-        # Store raw ESPN abbreviation (LB, RB, CM, LM etc.) — lineup_card does the mapping
-        players.append({"name": name, "pos": pos_abbr})
+        place = p.get("formationPlace")
+        players.append({"name": name, "pos": pos_abbr, "place": place})
 
     return {"formation": formation, "players": players}
 
@@ -208,11 +256,12 @@ def get_team_lineup_hints(
             continue
         if lineup.get("formation"):
             formations[lineup["formation"]] += 1
+        match_formation = lineup.get("formation", "")
         for p in lineup.get("players", []):
             name = p.get("name", "")
             # Normalize to ASCII so "Ødegaard" → "odegaard" matches Understat "Odegaard"
             last = _normalize(name.split()[-1]) if name else ""
-            pos  = p.get("pos", "")
+            pos  = _derive_pos(match_formation, p.get("place"), p.get("pos", ""))
             if last and pos:
                 pos_votes[last].append(pos)
 
