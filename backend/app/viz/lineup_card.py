@@ -324,8 +324,8 @@ def _order_line_by_side(players: list[dict], pos_hints: dict[str, str]) -> list[
         s = _espn_side(abbr)
         return {"L": 0, "C": 1, "R": 2}[s]
 
-    # Only reorder if we have hints for all players
-    if all(_lookup_espn_abbr(p, pos_hints) for p in players):
+    # Reorder as long as any player has a hint; unknowns default to "C" (centre slot)
+    if any(_lookup_espn_abbr(p, pos_hints) for p in players):
         return sorted(players, key=_side_key)
     return players
 
@@ -431,6 +431,10 @@ def build_xi(
         if pos_hints:
             pos = _lookup_pos(p, pos_hints)
             if pos is not None:
+                # Don't reclassify Understat defenders as forwards — ESPN can
+                # occasionally tag a right-back as "RF" due to wide positions.
+                if pos == "FWD" and _strict_pos(p) == "DEF":
+                    return "DEF"
                 return pos
         return _strict_pos(p)
 
