@@ -8,6 +8,7 @@ xGChain, xGBuildup, shots, key_passes, minutes, games).
 """
 from __future__ import annotations
 
+import html
 import logging
 from typing import Optional
 
@@ -105,7 +106,7 @@ def get_player_meta(player_id: str) -> dict:
         return {"name": "Unknown", "player_id": player_id, "season_stats": []}
 
     meta = {
-        "name":          data.get("player", {}).get("name", "Unknown"),
+        "name":          html.unescape(data.get("player", {}).get("name", "Unknown")),
         "player_id":     player_id,
         "season_stats":  _parse_season_stats(data.get("groups", {}).get("season", [])),
     }
@@ -210,7 +211,7 @@ def get_league_player_stats(league: str, season: int) -> list[dict]:
 
         players.append({
             "id":            str(p.get("id", "")),
-            "player":        p.get("player_name", ""),
+            "player":        html.unescape(p.get("player_name", "")),
             "team":          p.get("team_title", ""),
             "pos":           p.get("position", ""),
             "apps":          int(p.get("games", 0) or 0),
