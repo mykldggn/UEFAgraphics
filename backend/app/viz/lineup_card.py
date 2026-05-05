@@ -145,7 +145,7 @@ def _order_def_line(players: list[dict], n_def: int) -> list[dict]:
         right_flank = [fbs[1]] if len(fbs) >= 2 else []
         centre      = cbs   # already ascending avg → left-CB has lower avg
 
-    return left_flank + centre + right_flank
+    return right_flank + centre + left_flank
 
 
 def _order_fwd_line(players: list[dict]) -> list[dict]:
@@ -201,7 +201,8 @@ def _is_am(p: dict) -> bool:
 
 def _formation_coords(
     n_def: int, n_mid: int, n_fwd: int,
-    mid_players: list[dict] | None = None
+    mid_players: list[dict] | None = None,
+    forced_formation_parts: list[int] | None = None,
 ) -> list[tuple[float, float]]:
     """Return 11 (x, y) Opta positions: GK + DEF row + MID row(s) + FWD row."""
 
@@ -216,6 +217,21 @@ def _formation_coords(
 
     coords: list[tuple[float, float]] = [(50.0, 8.0)]   # GK
     coords += _spread(n_def, 27.0)
+
+    # Multi-layer mid: use forced formation structure when available (e.g. 4-2-3-1 → [2, 3])
+    if forced_formation_parts and len(forced_formation_parts) > 3:
+        mid_layer_counts = forced_formation_parts[1:-1]
+        n_layers = len(mid_layer_counts)
+        if n_layers == 2:
+            ys = [43.0, 60.0]
+        elif n_layers == 3:
+            ys = [40.0, 52.0, 65.0]
+        else:
+            ys = list(np.linspace(40.0, 65.0, n_layers))
+        for count, y_pos in zip(mid_layer_counts, ys):
+            coords += _spread(count, y_pos)
+        coords += _spread(n_fwd, 76.0)
+        return coords
 
     # Mid layering: detect DM / CM / AM sub-groups when mid_players is provided
     if mid_players and n_mid >= 3:
@@ -310,7 +326,7 @@ def _order_line_by_side(players: list[dict], pos_hints: dict[str, str]) -> list[
 
     # Only reorder if we have hints for all players
     if all(_lookup_espn_abbr(p, pos_hints) for p in players):
-        return sorted(players, key=_side_key)
+        return sorted(players, key=_side_key, reverse=True)
     return players
 
 
@@ -422,6 +438,7 @@ def build_xi(
     parsed = _parse_formation(forced_formation) if forced_formation else None
     if parsed:
         n_def_t, n_mid_t, n_fwd_t = parsed
+        forced_parts = [int(x) for x in forced_formation.split("-") if x.strip().isdigit()]
 
         def_pool = sorted([p for p in out_pool if _classify(p) == "DEF"],
                           key=_total_mins, reverse=True)
@@ -431,23 +448,22 @@ def build_xi(
         # Smart DEF selection: 1 LB + 2 CB + 1 RB (avoids 2 LBs in back 4)
         xi_def = _select_def_xi(def_pool, n_def_t, pos_hints or {})
         xi_fwd = fwd_pool[:n_fwd_t]
+        mid_pool = sorted([p for p in out_pool if _classify(p) == "MID"],
+                          key=_total_mins, reverse=True)
+        xi_mid = mid_pool[:n_mid_t]
 
-        used = {id(p) for p in xi_def + xi_fwd}
-        remaining = [p for p in out_pool if id(p) not in used]
-        xi_mid = remaining[:n_mid_t]
-
-        # Fill any short groups from leftover
-        for _ in range(3):
+        # Top up any short group from pool-agnostic leftovers
+        for _ in range(5):
             used2 = {id(p) for p in xi_def + xi_mid + xi_fwd}
             leftover = [p for p in out_pool if id(p) not in used2]
             if not leftover:
                 break
             if len(xi_def) < n_def_t:
                 xi_def.append(leftover.pop(0))
-            elif len(xi_fwd) < n_fwd_t:
-                xi_fwd.append(leftover.pop(0))
             elif len(xi_mid) < n_mid_t:
                 xi_mid.append(leftover.pop(0))
+            elif len(xi_fwd) < n_fwd_t:
+                xi_fwd.append(leftover.pop(0))
             else:
                 break
 
@@ -456,7 +472,7 @@ def build_xi(
         for p in xi_fwd: p["_pos_override"] = "FWD"
 
         n_def, n_mid, n_fwd = len(xi_def), len(xi_mid), len(xi_fwd)
-        # Use ESPN lateral hints for L→C→R ordering, fall back to heuristics
+        # Use ESPN lateral hints for ordering, fall back to heuristics
         if pos_hints:
             def_ordered = _order_line_by_side(xi_def, pos_hints)
             mid_ordered = _order_line_by_side(xi_mid, pos_hints)
@@ -466,8 +482,37 @@ def build_xi(
             mid_ordered = sorted(xi_mid, key=_total_mins, reverse=True)
             fwd_ordered = _order_fwd_line(xi_fwd)
 
+        # For multi-layer formations (e.g. 4-2-3-1), reorder mids so DMs come first
+        if len(forced_parts) > 3 and mid_ordered:
+            n_dm_layer = forced_parts[1]
+            if pos_hints:
+                dms_first = [p for p in mid_ordered
+                             if (_lookup_espn_abbr(p, pos_hints) or "") in ("DM", "CDM")]
+                others = [p for p in mid_ordered if id(p) not in {id(x) for x in dms_first}]
+                if len(dms_first) < n_dm_layer:
+                    # Fill with central mids before wide mids
+                    central = [p for p in others
+                               if _espn_side(_lookup_espn_abbr(p, pos_hints) or "") == "C"]
+                    wide    = [p for p in others
+                               if _espn_side(_lookup_espn_abbr(p, pos_hints) or "") != "C"]
+                    extra = (central + wide)[:n_dm_layer - len(dms_first)]
+                    dms_first += extra
+                    used_ids = {id(p) for p in dms_first}
+                    others = [p for p in mid_ordered if id(p) not in used_ids]
+            else:
+                dms_first = [p for p in mid_ordered if _is_dm(p)]
+                others = [p for p in mid_ordered if not _is_dm(p)]
+                if len(dms_first) < n_dm_layer:
+                    extra = others[:n_dm_layer - len(dms_first)]
+                    dms_first += extra
+                    used_ids = {id(p) for p in dms_first}
+                    others = [p for p in mid_ordered if id(p) not in used_ids]
+            mid_ordered = dms_first[:n_dm_layer] + others
+
+        use_parts = forced_parts if len(forced_parts) > 3 else None
         xi_ordered = xi_gk + def_ordered + mid_ordered + fwd_ordered
-        coords     = _formation_coords(n_def, n_mid, n_fwd, mid_players=mid_ordered)
+        coords     = _formation_coords(n_def, n_mid, n_fwd, mid_players=mid_ordered,
+                                       forced_formation_parts=use_parts)
 
         result = []
         for player, (x, y) in zip(xi_ordered, coords):
@@ -477,7 +522,7 @@ def build_xi(
                 "position": player.get("_pos_override") or _strict_pos(player),
                 "x": x, "y": y,
             })
-        return result, _formation_str(n_def, n_mid, n_fwd)
+        return result, forced_formation
 
     # ── Fallback: pos_hints available but no forced formation ─────────────────
     if pos_hints:
