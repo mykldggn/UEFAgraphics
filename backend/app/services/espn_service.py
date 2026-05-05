@@ -255,8 +255,11 @@ def get_team_lineup_hints(
     if not event_ids:
         return None, None, None
 
-    pos_votes:   dict[str, list[str]]   = defaultdict(list)
-    place_votes: dict[str, list[float]] = defaultdict(list)
+    pos_votes:   dict[str, list[str]]                  = defaultdict(list)
+    # Store (formation, place) tuples so we can filter to one formation when averaging.
+    # Averaging places across *different* formations is wrong — e.g. a CB who sometimes
+    # drops into a pivot slot in a fluid system gets an average place that looks like DM.
+    place_votes: dict[str, list[tuple[str, float]]]    = defaultdict(list)
     formations: Counter = Counter()
 
     for eid in event_ids:
@@ -273,9 +276,9 @@ def get_team_lineup_hints(
             if last and pos:
                 pos_votes[last].append(pos)
             raw_place = p.get("place")
-            if last and raw_place is not None:
+            if last and raw_place is not None and match_formation:
                 try:
-                    place_votes[last].append(float(raw_place))
+                    place_votes[last].append((match_formation, float(raw_place)))
                 except (TypeError, ValueError):
                     pass
 
@@ -284,9 +287,15 @@ def get_team_lineup_hints(
 
     pos_hints = {k: Counter(v).most_common(1)[0][0] for k, v in pos_votes.items()} or None
     formation  = formations.most_common(1)[0][0] if formations else None
-    place_hints = (
-        {k: sum(v) / len(v) for k, v in place_votes.items()}
-        if place_votes else None
-    )
+
+    # Only average formationPlaces from matches that used the most common formation.
+    place_hints: dict[str, float] | None = None
+    if place_votes and formation:
+        filtered = {
+            k: [pl for fm, pl in v if fm == formation]
+            for k, v in place_votes.items()
+        }
+        filtered = {k: v for k, v in filtered.items() if v}
+        place_hints = {k: sum(v) / len(v) for k, v in filtered.items()} if filtered else None
 
     return pos_hints, formation, place_hints
