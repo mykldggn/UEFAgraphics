@@ -490,17 +490,27 @@ def build_xi(
                              if (_lookup_espn_abbr(p, pos_hints) or "") in ("DM", "CDM")]
                 others = [p for p in mid_ordered if id(p) not in {id(x) for x in dms_first}]
                 if len(dms_first) < n_dm_layer:
-                    # Fill with central mids before wide mids, but never use CAMs/AMs
-                    _am_abbrs = {"CAM", "AM", "SS", "CF", "LW", "RW"}
+                    # Second priority: Understat DM heuristic (e.g. "M D" position token)
+                    # catches players ESPN tags as generic "CM" but who play DM
+                    understat_dms = [p for p in others if _is_dm(p)]
+                    dms_first += understat_dms[:n_dm_layer - len(dms_first)]
+                    used_ids = {id(p) for p in dms_first}
+                    others = [p for p in mid_ordered if id(p) not in used_ids]
+
+                if len(dms_first) < n_dm_layer:
+                    # Last resort: central mids; exclude wide/attacking/hybrid-def
+                    _non_dm_abbrs = {"CAM", "AM", "SS", "CF", "LW", "RW", "LM", "RM"}
                     non_am = [p for p in others
-                              if (_lookup_espn_abbr(p, pos_hints) or "") not in _am_abbrs
-                              and not _is_am(p)]
+                              if (_lookup_espn_abbr(p, pos_hints) or "") not in _non_dm_abbrs
+                              and not _is_am(p)
+                              and not (
+                                  _lookup_espn_abbr(p, pos_hints) is None
+                                  and _is_hybrid_def(p)
+                              )]
                     central = [p for p in non_am
-                               if _espn_side(_lookup_espn_abbr(p, pos_hints) or "") == "C"]
-                    wide    = [p for p in non_am
-                               if _espn_side(_lookup_espn_abbr(p, pos_hints) or "") != "C"]
-                    extra = (central + wide)[:n_dm_layer - len(dms_first)]
-                    dms_first += extra
+                               if _espn_side(_lookup_espn_abbr(p, pos_hints) or "") == "C"
+                               or not _lookup_espn_abbr(p, pos_hints)]
+                    dms_first += central[:n_dm_layer - len(dms_first)]
                     used_ids = {id(p) for p in dms_first}
                     others = [p for p in mid_ordered if id(p) not in used_ids]
             else:

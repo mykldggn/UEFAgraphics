@@ -9,6 +9,7 @@ which correctly distinguish DMs like Rice from defenders like Timber.
 """
 from __future__ import annotations
 
+import html
 import logging
 from collections import Counter, defaultdict
 
@@ -162,7 +163,7 @@ def _pick_team(rosters: list, team_name: str) -> dict | None:
     for p in best.get("roster", []):
         if not p.get("starter"):
             continue
-        name = p.get("athlete", {}).get("displayName", "")
+        name = html.unescape(p.get("athlete", {}).get("displayName", ""))
         pos_abbr = p.get("position", {}).get("abbreviation", "")
         # Store raw ESPN abbreviation (LB, RB, CM, LM etc.) — lineup_card does the mapping
         players.append({"name": name, "pos": pos_abbr})
