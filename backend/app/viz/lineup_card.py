@@ -326,7 +326,7 @@ def _order_line_by_side(players: list[dict], pos_hints: dict[str, str]) -> list[
 
     # Only reorder if we have hints for all players
     if all(_lookup_espn_abbr(p, pos_hints) for p in players):
-        return sorted(players, key=_side_key, reverse=True)
+        return sorted(players, key=_side_key)
     return players
 
 
