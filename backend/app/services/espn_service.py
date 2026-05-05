@@ -131,7 +131,7 @@ def get_event_lineup(event_id: str, team_name: str, league_slug: str) -> dict | 
     Shape: {"formation": "4-3-3", "players": [{"name": "Rice", "pos": "MID"}, ...]}
     Cached indefinitely (past matches don't change).
     """
-    ck = {"event_id": event_id}
+    ck = {"event_id": event_id, "v": 2}
     cached = cache.json_get("espn_lineup", ck, ttl_hours=24 * 365)
     if cached is not None:
         return _pick_team(cached, team_name)

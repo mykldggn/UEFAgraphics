@@ -177,7 +177,7 @@ def get_league_player_stats(league: str, season: int) -> list[dict]:
     Uses getLeaguePlayers endpoint — returns full stats including
     xG, xA, npxG, xGChain, xGBuildup, shots, key_passes.
     """
-    ck = {"league": league, "season": season}
+    ck = {"league": league, "season": season, "v": 2}
     cached = cache.json_get("understat_league_player_stats", ck, ttl_hours=24)
     if cached is not None:
         return cached
