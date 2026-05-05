@@ -40,6 +40,54 @@ export const infographicsApi = {
       `/infographics/team/${teamId}/lineup-players`,
       { team_name: teamName, league_id: leagueId, season }
     ),
+
+  // Team — new analytics
+  teamSquadMinutes: (teamId: string, teamName: string, leagueId: string, season: number) =>
+    imgUrl(`/infographics/team/${teamId}/squad-minutes`, { team_name: teamName, league_id: leagueId, season }),
+
+  teamMatchScatter: (teamId: string, teamName: string, leagueId: string, season: number) =>
+    imgUrl(`/infographics/team/${teamId}/match-scatter`, { team_name: teamName, league_id: leagueId, season }),
+
+  teamSituation: (teamId: string, teamName: string, leagueId: string, season: number) =>
+    imgUrl(`/infographics/team/${teamId}/situation`, { team_name: teamName, league_id: leagueId, season }),
+
+  teamXpoints: (teamId: string, teamName: string, leagueId: string, season: number) =>
+    imgUrl(`/infographics/team/${teamId}/xpoints`, { team_name: teamName, league_id: leagueId, season }),
+
+  teamScorerTimeline: (teamId: string, teamName: string, leagueId: string, season: number) =>
+    imgUrl(`/infographics/team/${teamId}/scorer-timeline`, { team_name: teamName, league_id: leagueId, season }),
+
+  // Player — new analytics (Understat only)
+  playerXgArc: (playerId: string, season: number) =>
+    imgUrl(`/infographics/player/${playerId}/xg-arc`, { season }),
+
+  playerShotQuality: (playerId: string, season: number) =>
+    imgUrl(`/infographics/player/${playerId}/shot-quality`, { season }),
+
+  playerShotSituation: (playerId: string, season: number) =>
+    imgUrl(`/infographics/player/${playerId}/shot-situation`, { season }),
+
+  playerSeasonCompare: (playerId: string) =>
+    imgUrl(`/infographics/player/${playerId}/season-compare`, {}),
+
+  playerRollingForm: (playerId: string, season: number) =>
+    imgUrl(`/infographics/player/${playerId}/rolling-form`, { season }),
+
+  // League — infographic images
+  leagueXgTable: (leagueId: string, season: number) =>
+    imgUrl(`/infographics/league/${leagueId}/xg-table`, { season }),
+
+  leagueQuadrant: (leagueId: string, season: number) =>
+    imgUrl(`/infographics/league/${leagueId}/quadrant`, { season }),
+
+  leagueGoldenBoot: (leagueId: string, season: number) =>
+    imgUrl(`/infographics/league/${leagueId}/golden-boot`, { season }),
+
+  leagueFormTable: (leagueId: string, season: number) =>
+    imgUrl(`/infographics/league/${leagueId}/form-table`, { season }),
+
+  leagueOverperformers: (leagueId: string, season: number) =>
+    imgUrl(`/infographics/league/${leagueId}/overperformers`, { season }),
 }
 
 export interface LineupPlayer {

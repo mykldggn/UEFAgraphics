@@ -10,9 +10,14 @@ import { SEASONS } from '../utils/constants'
 const SEASON_OPTS = SEASONS.map(s => ({ value: s, label: `${s}/${String(s + 1).slice(-2)}` }))
 
 const TABS = [
-  { id: 'xg-timeline', label: 'xG Timeline' },
-  { id: 'season-card', label: 'Season Card' },
-  { id: 'lineup',      label: 'Most Played XI' },
+  { id: 'xg-timeline',     label: 'xG Timeline' },
+  { id: 'season-card',     label: 'Season Card' },
+  { id: 'lineup',          label: 'Most Played XI' },
+  { id: 'squad-minutes',   label: 'Squad Minutes' },
+  { id: 'match-scatter',   label: 'Match Profile' },
+  { id: 'situation',       label: 'Situations' },
+  { id: 'xpoints',         label: 'xPoints' },
+  { id: 'scorer-timeline', label: 'Scorer Timeline' },
 ]
 
 interface TeamMeta {
@@ -59,6 +64,16 @@ export default function TeamPage() {
         return infographicsApi.teamSeasonCard(teamId!, teamName, leagueId, season)
       case 'lineup':
         return infographicsApi.teamLineup(teamId!, teamName, leagueId, season)
+      case 'squad-minutes':
+        return infographicsApi.teamSquadMinutes(teamId!, teamName, leagueId, season)
+      case 'match-scatter':
+        return infographicsApi.teamMatchScatter(teamId!, teamName, leagueId, season)
+      case 'situation':
+        return infographicsApi.teamSituation(teamId!, teamName, leagueId, season)
+      case 'xpoints':
+        return infographicsApi.teamXpoints(teamId!, teamName, leagueId, season)
+      case 'scorer-timeline':
+        return infographicsApi.teamScorerTimeline(teamId!, teamName, leagueId, season)
       default:
         return ''
     }

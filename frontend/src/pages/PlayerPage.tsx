@@ -18,11 +18,17 @@ const POSITION_OPTS = [
 ]
 
 const TABS = [
-  { id: 'shotmap',    label: 'Shot Map' },
-  { id: 'career-xg', label: 'Career xG' },
-  { id: 'radar',     label: 'Radar' },
-  { id: 'summary',   label: 'Summary Card' },
+  { id: 'shotmap',        label: 'Shot Map' },
+  { id: 'career-xg',     label: 'Career xG' },
+  { id: 'radar',         label: 'Radar' },
+  { id: 'summary',       label: 'Summary Card' },
+  { id: 'xg-arc',        label: 'xG Arc' },
+  { id: 'shot-quality',  label: 'Shot Quality' },
+  { id: 'shot-situation',label: 'Situations' },
+  { id: 'season-compare',label: 'Season Compare' },
+  { id: 'rolling-form',  label: 'Rolling Form' },
 ]
+
 
 function NotAvailableCard({ tab }: { tab: string }) {
   const label = tab === 'shotmap' ? 'Shot Map' : 'Career xG'
@@ -67,8 +73,8 @@ export default function PlayerPage() {
     ? decodeURIComponent(params.get('name')!)
     : playerId
 
-  // Non-top-5 players don't have shot data — show inline message, skip API call
-  const showNotAvailable = !isTopFive && (activeTab === 'shotmap' || activeTab === 'career-xg')
+  const UNDERSTAT_ONLY_TABS = new Set(['shotmap', 'career-xg', 'xg-arc', 'shot-quality', 'shot-situation', 'rolling-form'])
+  const showNotAvailable = !isTopFive && UNDERSTAT_ONLY_TABS.has(activeTab)
 
   function imgSrc(): string {
     switch (activeTab) {
@@ -80,12 +86,22 @@ export default function PlayerPage() {
         return infographicsApi.radar(playerId!, leagueId, season, position)
       case 'summary':
         return infographicsApi.summaryCard(playerId!, leagueId, cumulative ? undefined : season, position)
+      case 'xg-arc':
+        return infographicsApi.playerXgArc(playerId!, season)
+      case 'shot-quality':
+        return infographicsApi.playerShotQuality(playerId!, season)
+      case 'shot-situation':
+        return infographicsApi.playerShotSituation(playerId!, season)
+      case 'season-compare':
+        return infographicsApi.playerSeasonCompare(playerId!)
+      case 'rolling-form':
+        return infographicsApi.playerRollingForm(playerId!, season)
       default:
         return ''
     }
   }
 
-  const showSeasonSelector   = ['shotmap', 'radar', 'summary'].includes(activeTab) && !cumulative
+  const showSeasonSelector   = ['shotmap', 'radar', 'summary', 'xg-arc', 'shot-quality', 'shot-situation', 'rolling-form'].includes(activeTab) && !cumulative
   const showPositionSelector = ['radar', 'summary'].includes(activeTab)
   const showCumulative       = ['shotmap', 'summary'].includes(activeTab) && isTopFive
 

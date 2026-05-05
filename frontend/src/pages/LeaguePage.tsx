@@ -6,16 +6,23 @@ import {
 } from 'recharts'
 import Select from '../components/ui/Select'
 import TabBar from '../components/ui/TabBar'
+import InfographicViewer from '../components/ui/InfographicViewer'
 import { leaguesApi, type TableRow, type LeaderEntry } from '../api/leagues'
+import { infographicsApi } from '../api/infographics'
 import { SEASONS, CURRENT_SEASON } from '../utils/constants'
 
 
 const SEASON_OPTS = SEASONS.map(s => ({ value: s, label: `${s}/${String(s + 1).slice(-2)}` }))
 
 const PAGE_TABS = [
-  { id: 'table',   label: 'Table'         },
-  { id: 'race',    label: 'Position Race' },
-  { id: 'leaders', label: 'Leaders'       },
+  { id: 'table',         label: 'Table'          },
+  { id: 'race',          label: 'Position Race'  },
+  { id: 'leaders',       label: 'Leaders'        },
+  { id: 'xg-table',      label: 'xG Table'       },
+  { id: 'quadrant',      label: 'Quadrant'       },
+  { id: 'golden-boot',   label: 'Golden Boot'    },
+  { id: 'form-table',    label: 'Form Table'     },
+  { id: 'overperformers',label: 'Over/Under'     },
 ]
 
 // 20-colour palette for team lines — vivid spectrum
@@ -722,6 +729,41 @@ export default function LeaguePage() {
           !error && <div style={{ textAlign: 'center', padding: '48px 0', color: '#4d5e7a', fontSize: 13 }}>Leaders not available for this league.</div>
         )
       )}
+
+      {/* ── LEAGUE INFOGRAPHICS (PNG image tabs) ── */}
+      {(['xg-table', 'quadrant', 'golden-boot', 'form-table', 'overperformers'] as const).map(tab => {
+        if (activeTab !== tab) return null
+        const xgOnly = tab !== 'form-table'
+        if (xgOnly && !isUnderstatLeague) return (
+          <div key={tab} style={{ textAlign: 'center', padding: '48px 0' }}>
+            <p style={{ color: '#4d5e7a', fontSize: 13, marginBottom: 6 }}>
+              This chart requires xG data (Understat leagues only).
+            </p>
+            <p style={{ color: '#1e2c44', fontSize: 11 }}>
+              Supported: Premier League · La Liga · Bundesliga · Serie A · Ligue 1
+            </p>
+          </div>
+        )
+        const src = tab === 'xg-table'       ? infographicsApi.leagueXgTable(leagueId!, season)
+                  : tab === 'quadrant'        ? infographicsApi.leagueQuadrant(leagueId!, season)
+                  : tab === 'golden-boot'     ? infographicsApi.leagueGoldenBoot(leagueId!, season)
+                  : tab === 'form-table'      ? infographicsApi.leagueFormTable(leagueId!, season)
+                  :                            infographicsApi.leagueOverperformers(leagueId!, season)
+        return (
+          <div key={tab} style={{ display: 'flex', flexDirection: 'column', gap: 12, alignItems: 'center' }}>
+            <InfographicViewer src={src} alt={`${leagueId} ${tab}`} className="max-w-3xl w-full" />
+            <a
+              href={src}
+              download={`${leagueId}-${tab}-${season}.png`}
+              style={{ fontSize: 12, color: '#4d5e7a', textDecoration: 'none', transition: 'color 0.15s' }}
+              onMouseEnter={e => (e.currentTarget.style.color = '#c9a84c')}
+              onMouseLeave={e => (e.currentTarget.style.color = '#4d5e7a')}
+            >
+              ↓ Download PNG
+            </a>
+          </div>
+        )
+      })}
     </div>
   )
 }

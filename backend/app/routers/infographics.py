@@ -28,6 +28,21 @@ from app.viz import (
     team_xg_timeline,
     team_season_card as team_card_viz,
     lineup_card as lineup_viz,
+    player_xg_arc,
+    player_shot_quality,
+    player_shot_situation,
+    player_season_compare,
+    player_rolling_form,
+    team_squad_minutes as squad_minutes_viz,
+    team_match_scatter as match_scatter_viz,
+    team_situation as situation_viz,
+    team_xpoints as xpoints_viz,
+    team_scorer_timeline as scorer_timeline_viz,
+    league_xg_table as xg_table_viz,
+    league_quadrant as quadrant_viz,
+    league_golden_boot as golden_boot_viz,
+    league_form_table as form_table_viz,
+    league_overperformers as overperformers_viz,
 )
 
 logger = logging.getLogger(__name__)
@@ -609,6 +624,338 @@ def team_lineup(
         pos_hints        = pos_hints,
         forced_formation = formation_hint,
         place_hints      = place_hints,
+    )
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# PLAYER — shot-based analytics (Understat top-5 leagues only)
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _player_shots_season(player_id: str, season: int):
+    """Fetch and filter shots for a player/season. Raises 503 on failure."""
+    try:
+        shots = understat.get_player_shots(player_id)
+    except Exception as exc:
+        logger.error(f"shots {player_id}: {exc}")
+        raise HTTPException(503, "Failed to fetch shot data")
+    if season is not None and not shots.empty:
+        shots = shots[shots["season"] == season]
+    return shots
+
+
+@router.get("/player/{player_id}/xg-arc")
+def player_xg_arc_img(player_id: str, season: int = Query(...)):
+    ck = {"type": "xg_arc", "player_id": player_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    shots = _player_shots_season(player_id, season)
+    meta  = understat.get_player_meta(player_id)
+    png   = player_xg_arc.render(shots, meta.get("name", player_id), _season_label(season))
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/player/{player_id}/shot-quality")
+def player_shot_quality_img(player_id: str, season: int = Query(...)):
+    ck = {"type": "shot_quality", "player_id": player_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    shots = _player_shots_season(player_id, season)
+    meta  = understat.get_player_meta(player_id)
+    png   = player_shot_quality.render(shots, meta.get("name", player_id), _season_label(season))
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/player/{player_id}/shot-situation")
+def player_shot_situation_img(player_id: str, season: int = Query(...)):
+    ck = {"type": "shot_situation", "player_id": player_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    shots = _player_shots_season(player_id, season)
+    meta  = understat.get_player_meta(player_id)
+    png   = player_shot_situation.render(shots, meta.get("name", player_id), _season_label(season))
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/player/{player_id}/season-compare")
+def player_season_compare_img(player_id: str):
+    ck = {"type": "season_compare", "player_id": player_id, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    meta = understat.get_player_meta(player_id)
+    png  = player_season_compare.render(meta.get("season_stats", []), meta.get("name", player_id))
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/player/{player_id}/rolling-form")
+def player_rolling_form_img(player_id: str, season: int = Query(...)):
+    ck = {"type": "rolling_form", "player_id": player_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    shots = _player_shots_season(player_id, season)
+    meta  = understat.get_player_meta(player_id)
+    png   = player_rolling_form.render(shots, meta.get("name", player_id), _season_label(season))
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# TEAM — analytics (new)
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/team/{team_id}/squad-minutes")
+def team_squad_minutes_img(
+    team_id:   str,
+    team_name: str = Query(...),
+    league_id: str = Query(...),
+    season:    int = Query(...),
+):
+    ck = {"type": "squad_minutes", "team_id": team_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        raise HTTPException(400, "Squad minutes requires an Understat league")
+    us_teams  = understat.get_league_teams(us_slug, season)
+    us_team   = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
+    us_name   = us_team["name"] if us_team else team_name
+    all_pl    = understat.get_league_player_stats(us_slug, season)
+    players   = [p for p in all_pl if p.get("team") == us_name]
+    png = squad_minutes_viz.render(players, team_name, _season_label(season))
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/team/{team_id}/match-scatter")
+def team_match_scatter_img(
+    team_id:   str,
+    team_name: str = Query(...),
+    league_id: str = Query(...),
+    season:    int = Query(...),
+):
+    ck = {"type": "match_scatter", "team_id": team_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        raise HTTPException(400, "Match scatter requires an Understat league")
+    us_teams = understat.get_league_teams(us_slug, season)
+    us_team  = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
+    us_id    = us_team["id"] if us_team else team_id
+    history  = understat.get_team_xg_history(us_id, season, us_slug)
+    png = match_scatter_viz.render(history, team_name, _season_label(season))
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/team/{team_id}/situation")
+def team_situation_img(
+    team_id:   str,
+    team_name: str = Query(...),
+    league_id: str = Query(...),
+    season:    int = Query(...),
+):
+    ck = {"type": "situation", "team_id": team_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        raise HTTPException(400, "Situation breakdown requires an Understat league")
+    us_teams = understat.get_league_teams(us_slug, season)
+    us_team  = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
+    us_id    = us_team["id"] if us_team else team_id
+    shots_df = understat.get_team_shots(us_id, season, us_slug)
+    png = situation_viz.render(shots_df, team_name, _season_label(season))
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/team/{team_id}/xpoints")
+def team_xpoints_img(
+    team_id:   str,
+    team_name: str = Query(...),
+    league_id: str = Query(...),
+    season:    int = Query(...),
+):
+    ck = {"type": "xpoints", "team_id": team_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        raise HTTPException(400, "xPoints requires an Understat league")
+
+    us_teams    = understat.get_league_teams(us_slug, season)
+    us_team     = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
+    if not us_team:
+        raise HTTPException(404, f"Team {team_name} not found in Understat")
+
+    xpts = float(us_team.get("xPts") or 0)
+    xg   = float(us_team.get("xG")   or 0)
+    xga  = float(us_team.get("xGA")  or 0)
+
+    sorted_by_xpts = sorted(us_teams, key=lambda t: float(t.get("xPts") or 0), reverse=True)
+    xg_rank = next((i + 1 for i, t in enumerate(sorted_by_xpts)
+                    if _team_match(team_name, t["name"])), len(us_teams))
+
+    table        = fdorg.get_standings(league_id, season)
+    team_row     = next((r for r in table if _team_match(team_name, r.get("team", ""))), None)
+    actual_pts   = int(team_row.get("points") or 0) if team_row else 0
+    actual_rank  = next((i + 1 for i, r in enumerate(table)
+                         if _team_match(team_name, r.get("team", ""))), len(table))
+
+    league_avg_xg  = round(sum(float(t.get("xG",  0)) for t in us_teams) / len(us_teams), 2) if us_teams else 0
+    league_avg_xga = round(sum(float(t.get("xGA", 0)) for t in us_teams) / len(us_teams), 2) if us_teams else 0
+
+    png = xpoints_viz.render(
+        team_name=team_name,
+        season_label=_season_label(season),
+        league_label=fdorg.LEAGUE_LABELS.get(league_id, league_id),
+        actual_pts=actual_pts, xpts=xpts, xg=xg, xga=xga,
+        actual_rank=actual_rank, xg_rank=xg_rank,
+        league_avg_xg=league_avg_xg, league_avg_xga=league_avg_xga,
+    )
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/team/{team_id}/scorer-timeline")
+def team_scorer_timeline_img(
+    team_id:   str,
+    team_name: str = Query(...),
+    league_id: str = Query(...),
+    season:    int = Query(...),
+):
+    ck = {"type": "scorer_timeline", "team_id": team_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        raise HTTPException(400, "Scorer timeline requires an Understat league")
+    us_teams = understat.get_league_teams(us_slug, season)
+    us_team  = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
+    us_id    = us_team["id"] if us_team else team_id
+    shots_df = understat.get_team_shots(us_id, season, us_slug)
+    png = scorer_timeline_viz.render(shots_df, team_name, _season_label(season))
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# LEAGUE — infographic images
+# ─────────────────────────────────────────────────────────────────────────────
+
+@router.get("/league/{league_id}/xg-table")
+def league_xg_table_img(league_id: str, season: int = Query(...)):
+    ck = {"type": "league_xg_table", "league_id": league_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        raise HTTPException(400, "xG table requires an Understat league")
+    teams = understat.get_league_teams(us_slug, season)
+    teams_sorted = sorted(teams, key=lambda t: float(t.get("pts") or 0), reverse=True)
+    png = xg_table_viz.render(
+        fdorg.LEAGUE_LABELS.get(league_id, league_id),
+        _season_label(season),
+        teams_sorted,
+    )
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/league/{league_id}/quadrant")
+def league_quadrant_img(league_id: str, season: int = Query(...)):
+    ck = {"type": "league_quadrant", "league_id": league_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        raise HTTPException(400, "Quadrant chart requires an Understat league")
+    teams = understat.get_league_teams(us_slug, season)
+    png   = quadrant_viz.render(
+        fdorg.LEAGUE_LABELS.get(league_id, league_id),
+        _season_label(season),
+        teams,
+    )
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/league/{league_id}/golden-boot")
+def league_golden_boot_img(league_id: str, season: int = Query(...)):
+    ck = {"type": "league_golden_boot", "league_id": league_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        raise HTTPException(400, "Golden boot requires an Understat league")
+    players = understat.get_league_player_stats(us_slug, season)
+    png     = golden_boot_viz.render(
+        fdorg.LEAGUE_LABELS.get(league_id, league_id),
+        _season_label(season),
+        players,
+    )
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/league/{league_id}/form-table")
+def league_form_table_img(league_id: str, season: int = Query(...)):
+    ck = {"type": "league_form_table", "league_id": league_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    teams: list[dict] = []
+    if us_slug:
+        us_teams = understat.get_league_teams(us_slug, season)
+        teams    = sorted(us_teams, key=lambda t: float(t.get("pts") or 0), reverse=True)
+    else:
+        table = fdorg.get_standings(league_id, season)
+        teams = [{"name": r.get("team",""), "pts": r.get("points",0),
+                  "form": r.get("form",""), "wins": r.get("wins",0),
+                  "draws": r.get("draws",0), "loses": r.get("losses",0)} for r in table]
+    png = form_table_viz.render(
+        fdorg.LEAGUE_LABELS.get(league_id, league_id),
+        _season_label(season),
+        teams,
+    )
+    cache.img_save("infographic", ck, png)
+    return _png(png)
+
+
+@router.get("/league/{league_id}/overperformers")
+def league_overperformers_img(league_id: str, season: int = Query(...)):
+    ck = {"type": "league_overperformers", "league_id": league_id, "season": season, "v": 1}
+    if cached := cache.img_get("infographic", ck):
+        return _png(cached)
+    us_slug = understat.LEAGUE_TO_US.get(league_id)
+    if not us_slug:
+        raise HTTPException(400, "Overperformers requires an Understat league")
+
+    us_teams = understat.get_league_teams(us_slug, season)
+    table    = fdorg.get_standings(league_id, season)
+
+    merged: list[dict] = []
+    for t in us_teams:
+        fdrow = next((r for r in table if _team_match(t["name"], r.get("team",""))), None)
+        actual_pts = int(fdrow.get("points") or 0) if fdrow else int(t.get("pts") or 0)
+        merged.append({
+            "name":       t["name"],
+            "pts":        actual_pts,
+            "xPts":       float(t.get("xPts") or 0),
+            "xG":         float(t.get("xG")   or 0),
+            "xGA":        float(t.get("xGA")  or 0),
+        })
+
+    png = overperformers_viz.render(
+        fdorg.LEAGUE_LABELS.get(league_id, league_id),
+        _season_label(season),
+        merged,
     )
     cache.img_save("infographic", ck, png)
     return _png(png)
