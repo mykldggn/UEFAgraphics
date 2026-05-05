@@ -330,6 +330,30 @@ def _order_line_by_side(players: list[dict], pos_hints: dict[str, str]) -> list[
     return players
 
 
+def _lookup_place(p: dict, place_hints: dict[str, float]) -> float | None:
+    """Return avg ESPN formationPlace for a player via normalised last-name lookup."""
+    name = p.get("player") or p.get("player_name") or ""
+    last = _norm(name.split()[-1]) if name else ""
+    if last and last in place_hints:
+        return place_hints[last]
+    for k, v in place_hints.items():
+        if last and (last in k or k in last):
+            return v
+    return None
+
+
+def _order_line_by_place(players: list[dict], place_hints: dict[str, float]) -> list[dict]:
+    """
+    Sort players left → right by average ESPN formationPlace.
+    Lower place number = further left on the pitch (2=LB, 11=rightmost FWD).
+    Players without a place hint sort to the middle (place 6.0).
+    """
+    def _key(p: dict) -> float:
+        pl = _lookup_place(p, place_hints)
+        return pl if pl is not None else 6.0
+    return sorted(players, key=_key)
+
+
 def _select_def_xi(def_pool: list[dict], n_def: int,
                    pos_hints: dict[str, str]) -> list[dict]:
     """
@@ -399,6 +423,7 @@ def build_xi(
     players: list[dict],
     pos_hints: dict[str, str] | None = None,
     forced_formation: str | None = None,
+    place_hints: dict[str, float] | None = None,
 ) -> tuple[list[dict], str]:
     """
     Returns (xi_with_coords, formation_str).
@@ -427,12 +452,17 @@ def build_xi(
         out_pool = out_pool[1:]
 
     def _classify(p: dict) -> str:
-        """ESPN pos_hints first (reliable), _strict_pos as last resort."""
+        """
+        Place-based first (most reliable), ESPN abbr second, Understat last.
+        Conservative place bound (<=5) avoids misclassifying MIDs/FWDs as DEF.
+        """
+        if place_hints:
+            pl = _lookup_place(p, place_hints)
+            if pl is not None and pl <= 5:
+                return "DEF"
         if pos_hints:
             pos = _lookup_pos(p, pos_hints)
             if pos is not None:
-                # Don't reclassify Understat defenders as forwards — ESPN can
-                # occasionally tag a right-back as "RF" due to wide positions.
                 if pos == "FWD" and _strict_pos(p) == "DEF":
                     return "DEF"
                 return pos
@@ -443,6 +473,25 @@ def build_xi(
     if parsed:
         n_def_t, n_mid_t, n_fwd_t = parsed
         forced_parts = [int(x) for x in forced_formation.split("-") if x.strip().isdigit()]
+
+        # Redefine _classify with formation-accurate place thresholds
+        def _classify(p: dict) -> str:  # noqa: F811
+            if place_hints:
+                pl = _lookup_place(p, place_hints)
+                if pl is not None:
+                    if pl <= 1 + n_def_t:
+                        return "DEF"
+                    elif pl <= 1 + n_def_t + n_mid_t:
+                        return "MID"
+                    else:
+                        return "FWD"
+            if pos_hints:
+                pos = _lookup_pos(p, pos_hints)
+                if pos is not None:
+                    if pos == "FWD" and _strict_pos(p) == "DEF":
+                        return "DEF"
+                    return pos
+            return _strict_pos(p)
 
         def_pool = sorted([p for p in out_pool if _classify(p) == "DEF"],
                           key=_total_mins, reverse=True)
@@ -476,56 +525,59 @@ def build_xi(
         for p in xi_fwd: p["_pos_override"] = "FWD"
 
         n_def, n_mid, n_fwd = len(xi_def), len(xi_mid), len(xi_fwd)
-        # Use ESPN lateral hints for ordering, fall back to heuristics
-        if pos_hints:
+
+        # Order each line left→right:
+        # 1. formationPlace — ESPN's explicit left-right slot (most reliable)
+        # 2. ESPN lateral abbr (L/C/R prefix)
+        # 3. heuristic avg-mins fallbacks
+        if place_hints:
+            # formationPlace naturally separates DMs (lower) from AMs (higher)
+            # in multi-layer formations — no additional reorder needed
+            def_ordered = _order_line_by_place(xi_def, place_hints)
+            mid_ordered = _order_line_by_place(xi_mid, place_hints)
+            fwd_ordered = _order_line_by_place(xi_fwd, place_hints)
+        elif pos_hints:
             def_ordered = _order_line_by_side(xi_def, pos_hints)
             mid_ordered = _order_line_by_side(xi_mid, pos_hints)
             fwd_ordered = _order_line_by_side(xi_fwd, pos_hints)
-        else:
-            def_ordered = _order_def_line(xi_def, n_def)
-            mid_ordered = sorted(xi_mid, key=_total_mins, reverse=True)
-            fwd_ordered = _order_fwd_line(xi_fwd)
-
-        # For multi-layer formations (e.g. 4-2-3-1), reorder mids so DMs come first
-        if len(forced_parts) > 3 and mid_ordered:
-            n_dm_layer = forced_parts[1]
-            if pos_hints:
+            # Multi-layer: ensure DMs precede AMs in mid_ordered
+            if len(forced_parts) > 3 and mid_ordered:
+                n_dm_layer = forced_parts[1]
                 dms_first = [p for p in mid_ordered
                              if (_lookup_espn_abbr(p, pos_hints) or "") in ("DM", "CDM")]
                 others = [p for p in mid_ordered if id(p) not in {id(x) for x in dms_first}]
                 if len(dms_first) < n_dm_layer:
-                    # Second priority: Understat DM heuristic (e.g. "M D" position token)
-                    # catches players ESPN tags as generic "CM" but who play DM
                     understat_dms = [p for p in others if _is_dm(p)]
                     dms_first += understat_dms[:n_dm_layer - len(dms_first)]
                     used_ids = {id(p) for p in dms_first}
                     others = [p for p in mid_ordered if id(p) not in used_ids]
-
                 if len(dms_first) < n_dm_layer:
-                    # Last resort: central mids; exclude wide/attacking/hybrid-def
                     _non_dm_abbrs = {"CAM", "AM", "SS", "CF", "LW", "RW", "LM", "RM"}
                     non_am = [p for p in others
                               if (_lookup_espn_abbr(p, pos_hints) or "") not in _non_dm_abbrs
                               and not _is_am(p)
-                              and not (
-                                  _lookup_espn_abbr(p, pos_hints) is None
-                                  and _is_hybrid_def(p)
-                              )]
+                              and not (_lookup_espn_abbr(p, pos_hints) is None
+                                       and _is_hybrid_def(p))]
                     central = [p for p in non_am
                                if _espn_side(_lookup_espn_abbr(p, pos_hints) or "") == "C"
                                or not _lookup_espn_abbr(p, pos_hints)]
                     dms_first += central[:n_dm_layer - len(dms_first)]
                     used_ids = {id(p) for p in dms_first}
                     others = [p for p in mid_ordered if id(p) not in used_ids]
-            else:
+                mid_ordered = dms_first[:n_dm_layer] + others
+        else:
+            def_ordered = _order_def_line(xi_def, n_def)
+            mid_ordered = sorted(xi_mid, key=_total_mins, reverse=True)
+            fwd_ordered = _order_fwd_line(xi_fwd)
+            if len(forced_parts) > 3 and mid_ordered:
+                n_dm_layer = forced_parts[1]
                 dms_first = [p for p in mid_ordered if _is_dm(p)]
                 others = [p for p in mid_ordered if not _is_dm(p)]
                 if len(dms_first) < n_dm_layer:
-                    extra = others[:n_dm_layer - len(dms_first)]
-                    dms_first += extra
+                    dms_first += others[:n_dm_layer - len(dms_first)]
                     used_ids = {id(p) for p in dms_first}
                     others = [p for p in mid_ordered if id(p) not in used_ids]
-            mid_ordered = dms_first[:n_dm_layer] + others
+                mid_ordered = dms_first[:n_dm_layer] + others
 
         use_parts = forced_parts if len(forced_parts) > 3 else None
         xi_ordered = xi_gk + def_ordered + mid_ordered + fwd_ordered
@@ -627,6 +679,7 @@ def render(
     manager:          str = "",
     pos_hints:        dict[str, str] | None = None,
     forced_formation: str | None = None,
+    place_hints:      dict[str, float] | None = None,
 ) -> bytes:
     font    = get_font()
     primary = team_color(team_name)
@@ -635,7 +688,8 @@ def render(
         return _no_data_png(team_name, season_label, font)
 
     xi, formation = build_xi(players, pos_hints=pos_hints,
-                             forced_formation=forced_formation)
+                             forced_formation=forced_formation,
+                             place_hints=place_hints)
     if not xi:
         return _no_data_png(team_name, season_label, font)
 

@@ -230,30 +230,33 @@ def get_team_lineup_hints(
     internal_league_id: str,
     season: int,
     num_matches: int = 8,
-) -> tuple[dict[str, str] | None, str | None]:
+) -> tuple[dict[str, str] | None, str | None, dict[str, float] | None]:
     """
     Aggregate lineup data across recent matches.
-    Returns (pos_hints, formation_str).
+    Returns (pos_hints, formation_str, place_hints).
 
-    pos_hints — {last_name_lower: most_common_position "GK"/"DEF"/"MID"/"FWD"}
-    formation — most common formation string e.g. "4-3-3"
+    pos_hints   — {last_name_lower: most_common ESPN abbreviation e.g. "RB", "LW"}
+    formation   — most common formation string e.g. "4-3-3"
+    place_hints — {last_name_lower: avg_formation_place} where 1=GK, 2=leftmost DEF …
+                  11=rightmost FWD.  Directly encodes left→right order per layer.
 
-    Returns (None, None) if no ESPN data available for this league.
+    Returns (None, None, None) if no ESPN data available for this league.
     """
     league_slug = ESPN_LEAGUES.get(internal_league_id)
     if not league_slug:
-        return None, None
+        return None, None, None
 
     espn_team_id = get_espn_team_id(team_name, league_slug)
     if not espn_team_id:
         logger.debug("espn: could not resolve team ID for %s", team_name)
-        return None, None
+        return None, None, None
 
     event_ids = get_recent_event_ids(espn_team_id, league_slug, last=num_matches)
     if not event_ids:
-        return None, None
+        return None, None, None
 
-    pos_votes: dict[str, list[str]] = defaultdict(list)
+    pos_votes:   dict[str, list[str]]   = defaultdict(list)
+    place_votes: dict[str, list[float]] = defaultdict(list)
     formations: Counter = Counter()
 
     for eid in event_ids:
@@ -265,16 +268,25 @@ def get_team_lineup_hints(
         match_formation = lineup.get("formation", "")
         for p in lineup.get("players", []):
             name = p.get("name", "")
-            # Normalize to ASCII so "Ødegaard" → "odegaard" matches Understat "Odegaard"
             last = _normalize(name.split()[-1]) if name else ""
             pos  = _derive_pos(match_formation, p.get("place"), p.get("pos", ""))
             if last and pos:
                 pos_votes[last].append(pos)
+            raw_place = p.get("place")
+            if last and raw_place is not None:
+                try:
+                    place_votes[last].append(float(raw_place))
+                except (TypeError, ValueError):
+                    pass
 
-    if not pos_votes:
-        return None, None
+    if not pos_votes and not place_votes:
+        return None, None, None
 
     pos_hints = {k: Counter(v).most_common(1)[0][0] for k, v in pos_votes.items()} or None
-    formation = formations.most_common(1)[0][0] if formations else None
+    formation  = formations.most_common(1)[0][0] if formations else None
+    place_hints = (
+        {k: sum(v) / len(v) for k, v in place_votes.items()}
+        if place_votes else None
+    )
 
-    return pos_hints, formation
+    return pos_hints, formation, place_hints

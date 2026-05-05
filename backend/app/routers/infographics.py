@@ -508,7 +508,7 @@ def team_lineup_players(
     fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id)
 
     # ESPN lineup hints — current season, no API key needed
-    pos_hints, formation_hint = espn.get_team_lineup_hints(team_name, league_id, season)
+    pos_hints, formation_hint, place_hints = espn.get_team_lineup_hints(team_name, league_id, season)
 
     if us_slug:
         us_teams = understat.get_league_teams(us_slug, season)
@@ -518,7 +518,8 @@ def team_lineup_players(
         if not players:
             return {"players": [], "formation": ""}
         xi, formation = lineup_viz.build_xi(
-            players, pos_hints=pos_hints, forced_formation=formation_hint)
+            players, pos_hints=pos_hints, forced_formation=formation_hint,
+            place_hints=place_hints)
         player_pool = understat.get_league_player_stats(us_slug, season)
         id_map = {p["player"]: p["id"] for p in player_pool}
         return {
@@ -541,7 +542,8 @@ def team_lineup_players(
             if not team_pl:
                 return {"players": [], "formation": ""}
             xi, formation = lineup_viz.build_xi(
-                team_pl, pos_hints=pos_hints, forced_formation=formation_hint)
+                team_pl, pos_hints=pos_hints, forced_formation=formation_hint,
+                place_hints=place_hints)
             return {
                 "players": [
                     {"player": p["player"], "position": p["position"],
@@ -564,7 +566,7 @@ def team_lineup(
     league_id: str = Query(...),
     season:    int = Query(...),
 ):
-    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 30}
+    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 31}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
@@ -594,7 +596,7 @@ def team_lineup(
         return _png(png)
 
     # ESPN lineup hints — current season, no API key needed
-    pos_hints, formation_hint = espn.get_team_lineup_hints(team_name, league_id, season)
+    pos_hints, formation_hint, place_hints = espn.get_team_lineup_hints(team_name, league_id, season)
 
     manager = fdorg.get_team_coach(team_id) if team_id.isdigit() else ""
 
@@ -606,6 +608,7 @@ def team_lineup(
         manager          = manager,
         pos_hints        = pos_hints,
         forced_formation = formation_hint,
+        place_hints      = place_hints,
     )
     cache.img_save("infographic", ck, png)
     return _png(png)
