@@ -490,10 +490,14 @@ def build_xi(
                              if (_lookup_espn_abbr(p, pos_hints) or "") in ("DM", "CDM")]
                 others = [p for p in mid_ordered if id(p) not in {id(x) for x in dms_first}]
                 if len(dms_first) < n_dm_layer:
-                    # Fill with central mids before wide mids
-                    central = [p for p in others
+                    # Fill with central mids before wide mids, but never use CAMs/AMs
+                    _am_abbrs = {"CAM", "AM", "SS", "CF", "LW", "RW"}
+                    non_am = [p for p in others
+                              if (_lookup_espn_abbr(p, pos_hints) or "") not in _am_abbrs
+                              and not _is_am(p)]
+                    central = [p for p in non_am
                                if _espn_side(_lookup_espn_abbr(p, pos_hints) or "") == "C"]
-                    wide    = [p for p in others
+                    wide    = [p for p in non_am
                                if _espn_side(_lookup_espn_abbr(p, pos_hints) or "") != "C"]
                     extra = (central + wide)[:n_dm_layer - len(dms_first)]
                     dms_first += extra
