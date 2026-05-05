@@ -145,7 +145,7 @@ def _order_def_line(players: list[dict], n_def: int) -> list[dict]:
         right_flank = [fbs[1]] if len(fbs) >= 2 else []
         centre      = cbs   # already ascending avg → left-CB has lower avg
 
-    return right_flank + centre + left_flank
+    return left_flank + centre + right_flank
 
 
 def _order_fwd_line(players: list[dict]) -> list[dict]:
@@ -157,10 +157,10 @@ def _order_fwd_line(players: list[dict]) -> list[dict]:
 
     if strikers and wingers:
         # Strikers in centre, wingers on flanks.
-        # Highest-mins winger → LEFT, 2nd → RIGHT.
-        left  = [wingers[0]]   if len(wingers) >= 1 else []
-        right = [wingers[1]]   if len(wingers) >= 2 else []
-        extra = wingers[2:]    # rare 3+-winger case → right of right
+        # Highest-mins winger → RIGHT (Saka, Salah etc. tend to be right-side starters)
+        left  = [wingers[1]]   if len(wingers) >= 2 else []
+        right = [wingers[0]]   if len(wingers) >= 1 else []
+        extra = wingers[2:]    # rare 3+-winger case → between left and striker
         return left + extra + strikers + right
     elif not strikers:
         # No reliable striker detected.
