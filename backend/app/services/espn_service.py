@@ -125,18 +125,21 @@ def get_recent_event_ids(espn_team_id: str, league_slug: str, last: int = 8) -> 
     return ids
 
 
-def _derive_pos(formation: str, place: int | None, espn_abbr: str) -> str:
+def _derive_pos(formation: str, place, espn_abbr: str) -> str:
     """
     Combine ESPN formationPlace (1-11) + formation string to produce a precise
     position label for multi-layer formations.
 
     - GK / DEF / FWD layers: return espn_abbr unchanged (keep LB/RB/CB/LW/CF/RW).
-    - First mid layer in a multi-layer formation (4-2-3-1, 4-1-4-1, 3-4-3 etc.):
-      always return "DM" regardless of what ESPN generically calls it.
-    - Subsequent mid layers: return ESPN lateral tag (LM/RM/CAM/AM) when specific,
-      otherwise "AM".
-    - Single-layer formations (4-3-3, 3-5-2): return espn_abbr unchanged.
+    - First mid layer in a multi-layer formation (4-2-3-1, 4-1-4-1 etc.):
+      always return "DM" regardless of ESPN's generic label.
+    - Subsequent mid layers: keep ESPN lateral tag (LM/RM/CAM/AM) or fall back "AM".
+    - Single-layer formations (4-3-3, 3-5-2 etc.): return espn_abbr unchanged.
     """
+    try:
+        place = int(place)
+    except (TypeError, ValueError):
+        return espn_abbr
     if not place or not formation:
         return espn_abbr
     try:
@@ -150,16 +153,19 @@ def _derive_pos(formation: str, place: int | None, espn_abbr: str) -> str:
         return espn_abbr  # GK
 
     idx = place - 2  # 0-based among outfield players
+    if idx < 0:
+        return espn_abbr
 
     if idx < parts[0]:
         return espn_abbr  # DEF layer: keep LB/RB/CB etc.
     idx -= parts[0]
 
     mid_parts = parts[1:-1] if len(parts) > 2 else []
-    if not mid_parts:
-        return espn_abbr  # Single mid layer (4-3-3): keep as-is
+    # Only apply DM/AM logic when there are genuinely 2+ distinct mid layers
+    if len(mid_parts) < 2:
+        return espn_abbr  # Single mid layer (4-3-3, 3-5-2 etc.): keep as-is
 
-    # Multi-layer mid: first layer = DM, rest = AM
+    # Multi-layer: first layer = DM, subsequent layers = AM
     if idx < mid_parts[0]:
         return "DM"
     idx -= mid_parts[0]
