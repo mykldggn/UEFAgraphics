@@ -278,7 +278,7 @@ def get_most_played_xi(league: str, season: int, team_name: str) -> list[dict]:
 # ── Team data ──────────────────────────────────────────────────────────────────
 
 def get_league_teams(league: str, season: int) -> list[dict]:
-    ck = {"league": league, "season": season, "v": 2}
+    ck = {"league": league, "season": season, "v": 3}
     ttl = 2 if season >= CURRENT_SEASON else 24 * 7
     cached = cache.json_get("understat_league_teams", ck, ttl_hours=ttl)
     if cached is not None:
@@ -293,22 +293,22 @@ def get_league_teams(league: str, season: int) -> list[dict]:
     teams = []
     for tid, info in teams_raw.items():
         history = info.get("history", [])
-        # Aggregate from per-match history (top-level fields absent for older seasons)
         wins  = sum(int(m.get("wins",   0)) for m in history)
         draws = sum(int(m.get("draws",  0)) for m in history)
         loses = sum(int(m.get("loses",  0)) for m in history)
         pts   = wins * 3 + draws
         gf    = sum(int(m.get("scored", 0)) for m in history)
         ga    = sum(int(m.get("missed", 0)) for m in history)
-        xg    = round(sum(float(m.get("xG",  0)) for m in history), 2)
-        xga   = round(sum(float(m.get("xGA", 0)) for m in history), 2)
+        xg    = round(sum(float(m.get("xG",   0)) for m in history), 2)
+        xga   = round(sum(float(m.get("xGA",  0)) for m in history), 2)
+        xpts  = round(sum(float(m.get("xpts", 0)) for m in history), 1)
         form  = "".join(m.get("result", "").upper() for m in history[-5:])
         teams.append({
             "id":           str(tid),
             "name":         info.get("title", ""),
             "xG":           xg,
             "xGA":          xga,
-            "xPts":         float(info.get("xpts", 0) or 0),
+            "xPts":         xpts,
             "pts":          pts,
             "wins":         wins,
             "draws":        draws,
