@@ -3,13 +3,13 @@ import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
 import TabBar from '../components/ui/TabBar'
 import InfographicViewer from '../components/ui/InfographicViewer'
 import Select from '../components/ui/Select'
+import CoverageNotice from '../components/ui/CoverageNotice'
 import { infographicsApi, type LineupPlayer } from '../api/infographics'
 import { leaguesApi, type TableRow } from '../api/leagues'
 import {
   SEASONS,
   LEAGUE_LABELS,
   FULL_INFOGRAPHIC_LEAGUES,
-  FULL_INFOGRAPHIC_SUPPORT_LABEL,
 } from '../utils/constants'
 
 const SEASON_OPTS = SEASONS.map(s => ({ value: s, label: `${s}/${String(s + 1).slice(-2)}` }))
@@ -212,24 +212,7 @@ export default function TeamPage() {
       </div>
 
       {!isFullInfographicLeague ? (
-        <div style={{
-          background: '#0c1321',
-          border: '1px solid #1a2235',
-          borderRadius: 8,
-          padding: '48px 32px',
-          textAlign: 'center',
-        }}>
-          <div style={{ color: '#e6e9f4', fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
-            Team infographics unavailable
-          </div>
-          <div style={{ color: '#4d5e7a', fontSize: 13, maxWidth: 520, margin: '0 auto', lineHeight: 1.6 }}>
-            This league is not shown in the infographic selector because full current-season
-            Player, Team, and League coverage cannot be replicated at Understat quality yet.
-          </div>
-          <div style={{ color: '#1e2c44', fontSize: 11, marginTop: 10 }}>
-            Supported: {FULL_INFOGRAPHIC_SUPPORT_LABEL}
-          </div>
-        </div>
+        <CoverageNotice kind="team" />
       ) : (
         <>
       <TabBar tabs={TABS} active={activeTab} onChange={handleTabChange} />

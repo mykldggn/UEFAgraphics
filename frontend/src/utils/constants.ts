@@ -32,14 +32,6 @@ export const LEAGUE_LABELS: Record<string, string> = {
   'INT-NL':   'UEFA Nations League',
 }
 
-export const UNDERSTAT_LEAGUES = [
-  { id: 'EPL',        label: 'Premier League' },
-  { id: 'La_liga',    label: 'La Liga' },
-  { id: 'Bundesliga', label: 'Bundesliga' },
-  { id: 'Serie_A',    label: 'Serie A' },
-  { id: 'Ligue_1',    label: 'Ligue 1' },
-]
-
 // Understat coverage starts 2014/15 season
 export const SEASONS = [2025, 2024, 2023, 2022, 2021, 2020, 2019, 2018, 2017, 2016, 2015, 2014]
 

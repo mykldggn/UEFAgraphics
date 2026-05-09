@@ -3,12 +3,12 @@ import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
 import TabBar from '../components/ui/TabBar'
 import InfographicViewer from '../components/ui/InfographicViewer'
 import Select from '../components/ui/Select'
+import CoverageNotice from '../components/ui/CoverageNotice'
 import { infographicsApi } from '../api/infographics'
 import {
   SEASONS,
   LEAGUE_LABELS,
   FULL_INFOGRAPHIC_LEAGUES,
-  FULL_INFOGRAPHIC_SUPPORT_LABEL,
 } from '../utils/constants'
 
 const SEASON_OPTS = SEASONS.map(s => ({ value: s, label: `${s}/${String(s + 1).slice(-2)}` }))
@@ -31,36 +31,6 @@ const TABS = [
   { id: 'season-compare',label: 'Season Compare' },
   { id: 'rolling-form',  label: 'Rolling Form' },
 ]
-
-
-function NotAvailableCard({ tab }: { tab: string }) {
-  const label = TABS.find(t => t.id === tab)?.label ?? 'Infographic'
-  return (
-    <div style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center',
-      justifyContent: 'center', gap: 16,
-      background: '#0c1321', borderRadius: 8, padding: '64px 32px',
-      border: '1px solid #1a2235', minHeight: 240,
-    }}>
-      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" style={{ opacity: 0.4 }}>
-        <circle cx="12" cy="12" r="10" stroke="#4d5e7a" strokeWidth="1.5"/>
-        <path d="M12 8v4M12 16h.01" stroke="#4d5e7a" strokeWidth="1.5" strokeLinecap="round"/>
-      </svg>
-      <div style={{ textAlign: 'center' }}>
-        <div style={{ color: '#e6e9f4', fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
-          {label} not available
-        </div>
-        <div style={{ color: '#4d5e7a', fontSize: 13, maxWidth: 340, lineHeight: 1.6 }}>
-          This player infographic requires full current-season Understat coverage across
-          player, team, and league views.
-        </div>
-        <div style={{ color: '#1e2c44', fontSize: 11, maxWidth: 360, lineHeight: 1.5, marginTop: 8 }}>
-          Supported: {FULL_INFOGRAPHIC_SUPPORT_LABEL}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export default function PlayerPage() {
   const { playerId }       = useParams<{ playerId: string }>()
@@ -197,7 +167,7 @@ export default function PlayerPage() {
       <div style={{ display: 'flex', justifyContent: 'center' }}>
         {showNotAvailable ? (
           <div style={{ width: '100%', maxWidth: 672 }}>
-            <NotAvailableCard tab={activeTab} />
+            <CoverageNotice kind="player" />
           </div>
         ) : (
           <InfographicViewer

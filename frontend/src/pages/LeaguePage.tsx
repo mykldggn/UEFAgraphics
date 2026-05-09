@@ -7,6 +7,7 @@ import {
 import Select from '../components/ui/Select'
 import TabBar from '../components/ui/TabBar'
 import InfographicViewer from '../components/ui/InfographicViewer'
+import CoverageNotice from '../components/ui/CoverageNotice'
 import { leaguesApi, type TableRow, type LeaderEntry } from '../api/leagues'
 import { infographicsApi } from '../api/infographics'
 import {
@@ -477,24 +478,7 @@ export default function LeaguePage() {
       </div>
 
       {!isFullInfographicLeague ? (
-        <div style={{
-          background: '#0c1321',
-          border: '1px solid #1a2235',
-          borderRadius: 8,
-          padding: '48px 32px',
-          textAlign: 'center',
-        }}>
-          <div style={{ color: '#e6e9f4', fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
-            League infographics unavailable
-          </div>
-          <div style={{ color: '#4d5e7a', fontSize: 13, maxWidth: 520, margin: '0 auto', lineHeight: 1.6 }}>
-            This league is not shown in the infographic selector because full current-season
-            Player, Team, and League coverage cannot be replicated at Understat quality yet.
-          </div>
-          <div style={{ color: '#1e2c44', fontSize: 11, marginTop: 10 }}>
-            Supported: {FULL_INFOGRAPHIC_SUPPORT_LABEL}
-          </div>
-        </div>
+        <CoverageNotice kind="league" />
       ) : (
         <>
       <TabBar tabs={PAGE_TABS} active={activeTab} onChange={setActiveTab} />
@@ -766,17 +750,6 @@ export default function LeaguePage() {
       {/* ── LEAGUE INFOGRAPHICS (PNG image tabs) ── */}
       {(['xg-table', 'quadrant', 'golden-boot', 'form-table', 'overperformers'] as const).map(tab => {
         if (activeTab !== tab) return null
-        const xgOnly = tab !== 'form-table'
-        if (xgOnly && !isFullInfographicLeague) return (
-          <div key={tab} style={{ textAlign: 'center', padding: '48px 0' }}>
-            <p style={{ color: '#4d5e7a', fontSize: 13, marginBottom: 6 }}>
-              This chart requires xG data (Understat leagues only).
-            </p>
-            <p style={{ color: '#1e2c44', fontSize: 11 }}>
-              Supported: {FULL_INFOGRAPHIC_SUPPORT_LABEL}
-            </p>
-          </div>
-        )
         const src = tab === 'xg-table'       ? infographicsApi.leagueXgTable(leagueId!, season)
                   : tab === 'quadrant'        ? infographicsApi.leagueQuadrant(leagueId!, season)
                   : tab === 'golden-boot'     ? infographicsApi.leagueGoldenBoot(leagueId!, season)

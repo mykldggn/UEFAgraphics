@@ -2,7 +2,7 @@
 Understat data layer.
 Uses curl_cffi (Chrome TLS fingerprint) so Cloudflare never blocks it.
 
-Covers: EPL, La_liga, Bundesliga, Serie_A, Ligue_1, RFPL
+Covers: EPL, La_liga, Bundesliga, Serie_A, Ligue_1
 Shot data + full player season stats (goals, assists, xG, xA, npxG,
 xGChain, xGBuildup, shots, key_passes, minutes, games).
 """
@@ -28,7 +28,6 @@ UNDERSTAT_LEAGUES = {
     "Bundesliga": "Bundesliga",
     "Serie_A":    "Serie A",
     "Ligue_1":    "Ligue 1",
-    "RFPL":       "Russian Premier League",
 }
 
 # Map our internal league IDs → Understat league slug
@@ -38,7 +37,6 @@ LEAGUE_TO_US: dict[str, str] = {
     "DEU-1": "Bundesliga",
     "ITA-1": "Serie_A",
     "FRA-1": "Ligue_1",
-    "RUS-1": "RFPL",
 }
 
 
