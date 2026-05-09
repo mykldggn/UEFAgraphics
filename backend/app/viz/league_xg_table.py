@@ -63,7 +63,7 @@ def render(
              va="top", fontweight="bold")
 
     col_xs = [0.04, 0.09, 0.42, 0.53, 0.63, 0.73, 0.83, 0.93]
-    col_labels = ["#", "Team", "Pts", "xPts", "Δ", "xG", "xGA", "Trend"]
+    col_labels = ["#", "Team", "Pts", "xPts", "Δ", "xG", "xGA", "xRank"]
     col_ha     = ["center", "left", "center", "center", "center", "center", "center", "center"]
 
     hdr_y = header_y - 0.01
@@ -147,13 +147,14 @@ def render(
         ax.text(col_xs[6], cy, f"{xga:.1f}", fontsize=9, fontproperties=font,
                 color=TEXT_SUB, ha="center", va="center")
 
-        # Trend (xPts rank)
+        # Expected-points rank
         ax.text(col_xs[7], cy, f"xR{xr}", fontsize=8, fontproperties=font,
                 color=TEXT_SUB, ha="center", va="center")
 
     # Footer note
     fig.text(0.5, footer_y,
-             "xPts = Expected Points based on xG.  Arrow shows position change in xG table.  "
+             "xPts = Expected Points based on xG. xRank is rank by xPts. "
+             "Arrow shows actual-table position vs xPts rank.  "
              "Data: Understat  ·  UEFAgraphics",
              fontsize=7.5, color="#374151", ha="center", va="bottom",
              fontproperties=font)

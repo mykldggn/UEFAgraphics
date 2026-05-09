@@ -256,7 +256,7 @@ function LeaderBoard({
   title: string
   entries: LeaderEntry[]
   unit?: string
-  onPlayerClick?: (player: string, team: string) => void
+  onPlayerClick?: (entry: LeaderEntry) => void
 }) {
   return (
     <div style={{
@@ -279,7 +279,7 @@ function LeaderBoard({
         {entries.slice(0, 10).map((e, i) => (
           <div
             key={i}
-            onClick={() => onPlayerClick?.(e.player, e.team)}
+            onClick={() => onPlayerClick?.(e)}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -446,8 +446,9 @@ export default function LeaguePage() {
     navigate(`/team/${encodeURIComponent(teamId)}?name=${encodeURIComponent(String(row.team))}&league=${leagueId}&season=${season}`)
   }
 
-  function handlePlayerClick(player: string, _team: string) {
-    navigate(`/player/${encodeURIComponent(player)}?season=${season}&league=${leagueId}&source=understat&name=${encodeURIComponent(player)}`)
+  function handlePlayerClick(entry: LeaderEntry) {
+    const routeId = entry.id ?? entry.player
+    navigate(`/player/${encodeURIComponent(routeId)}?season=${season}&league=${leagueId}&source=understat&name=${encodeURIComponent(entry.player)}`)
   }
 
   return (

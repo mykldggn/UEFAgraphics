@@ -77,6 +77,7 @@ export const leaguesApi = {
 }
 
 export interface LeaderEntry {
+  id?: string
   player: string
   team: string
   value: number

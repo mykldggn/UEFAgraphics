@@ -373,7 +373,7 @@ def get_league_position_history(league: str, season: int) -> dict:
 
 def get_league_leaders(league: str, season: int) -> dict:
     """Top 10 players in goals, assists, xG, key passes for a league-season."""
-    ck = {"league": league, "season": season, "type": "leaders"}
+    ck = {"league": league, "season": season, "type": "leaders", "v": 2}
     ttl = 2 if season >= CURRENT_SEASON else 24 * 7
     cached = cache.json_get("understat_leaders", ck, ttl_hours=ttl)
     if cached is not None:
@@ -385,7 +385,7 @@ def get_league_leaders(league: str, season: int) -> dict:
 
     def top(key: str, n: int = 10) -> list[dict]:
         return [
-            {"player": p["player"], "team": p["team"], "value": p.get(key, 0)}
+            {"id": p.get("id"), "player": p["player"], "team": p["team"], "value": p.get(key, 0)}
             for p in sorted(
                 [p for p in stats if float(p.get(key, 0) or 0) > 0],
                 key=lambda p: float(p.get(key, 0) or 0),
@@ -396,7 +396,7 @@ def get_league_leaders(league: str, season: int) -> dict:
     result = {
         "goals":      top("goals"),
         "assists":    top("assists"),
-        "xg":         [{"player": p["player"], "team": p["team"],
+        "xg":         [{"id": p.get("id"), "player": p["player"], "team": p["team"],
                         "value": round(float(p.get("xg", 0)), 2)}
                        for p in sorted(stats, key=lambda p: float(p.get("xg", 0) or 0), reverse=True)
                        if float(p.get("xg", 0) or 0) > 0][:10],

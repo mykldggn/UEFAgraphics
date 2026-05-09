@@ -1049,7 +1049,7 @@ def team_scorer_timeline_img(
 
 @router.get("/league/{league_id}/xg-table")
 def league_xg_table_img(league_id: str, season: int = Query(...)):
-    ck = {"type": "league_xg_table", "league_id": league_id, "season": season, "v": 2}
+    ck = {"type": "league_xg_table", "league_id": league_id, "season": season, "v": 3}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
     us_slug = understat.LEAGUE_TO_US.get(league_id)
