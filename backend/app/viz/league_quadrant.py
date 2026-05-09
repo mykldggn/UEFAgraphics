@@ -51,6 +51,8 @@ def render(
     x_max = max(xg_vals)  + x_pad
     y_min = min(xga_vals) - y_pad
     y_max = max(xga_vals) + y_pad
+    x_range = x_max - x_min
+    y_range = y_max - y_min
 
     # Quadrant fills (inverted y: low xGA = top)
     # top-right (high xG, low xGA) → GREEN = Title Contenders
@@ -80,24 +82,20 @@ def render(
     ax.axvline(mean_xg,  color=TEXT_SUB, lw=1.2, ls="--", alpha=0.6, zorder=2)
     ax.axhline(mean_xga, color=TEXT_SUB, lw=1.2, ls="--", alpha=0.6, zorder=2)
 
-    x_range = x_max - x_min
-    y_range = y_max - y_min
-
     for name, x, y in zip(names, xg_vals, xga_vals):
         color = team_color(name)
         ax.scatter(x, y, s=180, color=color, edgecolors=BG, lw=1.5, zorder=4)
 
-        # Place label left/right and above/below based on position relative to mean
+        # Place label left/right and away from the mean line (y-axis is inverted)
         ha = "left" if x >= mean_xg else "right"
-        va = "bottom" if y >= mean_xga else "top"
+        va = "top" if y >= mean_xga else "bottom"
         dx = x_range * 0.012 if ha == "left" else -x_range * 0.012
-        dy = y_range * 0.012 if va == "bottom" else -y_range * 0.012
+        dy = y_range * 0.012 if va == "top" else -y_range * 0.012
         ax.text(x + dx, y + dy, name, fontsize=7,
                 color=TEXT, fontproperties=font, ha=ha, va=va, zorder=5)
 
-    ax.invert_yaxis()
     ax.set_xlim(x_min, x_max)
-    ax.set_ylim(y_max, y_min)
+    ax.set_ylim(y_max, y_min)  # inverted: low xGA at top
     ax.set_xlabel("xG For (Season Total)", color=TEXT_SUB, fontsize=10,
                   fontproperties=font, labelpad=6)
     ax.set_ylabel("xGA (Season Total, lower = better)", color=TEXT_SUB,
