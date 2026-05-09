@@ -5,6 +5,7 @@ import InfographicViewer from '../components/ui/InfographicViewer'
 import Select from '../components/ui/Select'
 import CoverageNotice from '../components/ui/CoverageNotice'
 import { infographicsApi } from '../api/infographics'
+import { leaguesApi } from '../api/leagues'
 import {
   SEASONS,
   LEAGUE_LABELS,
@@ -32,6 +33,24 @@ const TABS = [
   { id: 'rolling-form',  label: 'Rolling Form' },
 ]
 
+const UNDERSTAT_ID_RE = /^\d+$/
+
+function safeDecode(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
+}
+
+function normaliseName(value: string): string {
+  return value.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().trim()
+}
+
+function playerResultName(result: { name?: string; player?: string }): string {
+  return result.name ?? result.player ?? ''
+}
+
 export default function PlayerPage() {
   const { playerId }       = useParams<{ playerId: string }>()
   const [params]           = useSearchParams()
@@ -45,6 +64,14 @@ export default function PlayerPage() {
   const [season, setSeason]         = useState(Number(params.get('season') ?? 2025))
   const [position, setPosition]     = useState('FW')
   const [cumulative, setCumulative] = useState(false)
+  const [resolvedPlayerId, setResolvedPlayerId] = useState<string | null>(null)
+  const [resolvingPlayer, setResolvingPlayer]   = useState(false)
+
+  const routePlayerId = playerId ?? ''
+  const paramsKey = params.toString()
+  const needsPlayerResolution = Boolean(
+    routePlayerId && isFullInfographicLeague && !UNDERSTAT_ID_RE.test(routePlayerId)
+  )
 
   // Sync tab from URL when navigating back/forward
   useEffect(() => {
@@ -52,34 +79,85 @@ export default function PlayerPage() {
     setActiveTab(t)
   }, [params])
 
+  // Older leaderboard links used the player name as the route param. Understat
+  // infographic endpoints need the numeric player id, so resolve name-like URLs
+  // before requesting images.
+  useEffect(() => {
+    if (!routePlayerId || !needsPlayerResolution) {
+      setResolvedPlayerId(null)
+      setResolvingPlayer(false)
+      return
+    }
+
+    let cancelled = false
+    const query = params.get('name')
+      ? safeDecode(params.get('name')!)
+      : safeDecode(routePlayerId)
+
+    setResolvedPlayerId(null)
+    setResolvingPlayer(true)
+
+    leaguesApi.searchPlayers(leagueId, query, season)
+      .then(({ results }) => {
+        if (cancelled) return
+
+        const q = normaliseName(query)
+        const exact = results.find(r => normaliseName(playerResultName(r)) === q)
+        const fuzzy = results.find(r => {
+          const name = normaliseName(playerResultName(r))
+          return name.includes(q) || q.includes(name)
+        })
+        const match = exact ?? fuzzy ?? results[0]
+        if (!match?.id) return
+
+        const nextId = String(match.id)
+        const nextParams = new URLSearchParams(params)
+        nextParams.set('name', playerResultName(match) || query)
+        nextParams.set('source', match.source || 'understat')
+
+        setResolvedPlayerId(nextId)
+        navigate(`/player/${encodeURIComponent(nextId)}?${nextParams.toString()}`, { replace: true })
+      })
+      .finally(() => {
+        if (!cancelled) setResolvingPlayer(false)
+      })
+
+    return () => {
+      cancelled = true
+    }
+  }, [routePlayerId, needsPlayerResolution, leagueId, season, paramsKey, navigate])
+
   if (!playerId) return null
 
   const playerName = params.get('name')
-    ? decodeURIComponent(params.get('name')!)
-    : playerId
+    ? safeDecode(params.get('name')!)
+    : safeDecode(playerId)
 
   const showNotAvailable = !isFullInfographicLeague
+  const effectivePlayerId = needsPlayerResolution ? (resolvedPlayerId ?? '') : playerId
 
   function imgSrc(): string {
+    if (!effectivePlayerId) return ''
+
     switch (activeTab) {
       case 'shotmap':
-        return infographicsApi.shotmap(playerId!, cumulative ? undefined : season)
+        return infographicsApi.shotmap(effectivePlayerId, cumulative ? undefined : season)
       case 'career-xg':
-        return infographicsApi.careerXg(playerId!)
+        return infographicsApi.careerXg(effectivePlayerId)
       case 'radar':
-        return infographicsApi.radar(playerId!, leagueId, season, position)
+        return infographicsApi.radar(effectivePlayerId, leagueId, season, position)
       case 'summary':
-        return infographicsApi.summaryCard(playerId!, leagueId, cumulative ? undefined : season, position)
+        return infographicsApi.summaryCard(effectivePlayerId, leagueId, cumulative ? undefined : season, position)
       case 'xg-arc':
-        return infographicsApi.playerXgArc(playerId!, season)
+        return infographicsApi.playerXgArc(effectivePlayerId, season)
       case 'shot-quality':
-        return infographicsApi.playerShotQuality(playerId!, season)
+        return infographicsApi.playerShotQuality(effectivePlayerId, season)
       case 'shot-situation':
-        return infographicsApi.playerShotSituation(playerId!, season)
+        return infographicsApi.playerShotSituation(effectivePlayerId, season)
       case 'season-compare':
-        return infographicsApi.playerSeasonCompare(playerId!)
+        return infographicsApi.playerSeasonCompare(effectivePlayerId)
       case 'rolling-form':
-        return infographicsApi.playerRollingForm(playerId!, season)
+        return infographicsApi.playerRollingForm(effectivePlayerId, season)
       default:
         return ''
     }
@@ -88,6 +166,7 @@ export default function PlayerPage() {
   const showSeasonSelector   = ['shotmap', 'radar', 'summary', 'xg-arc', 'shot-quality', 'shot-situation', 'rolling-form'].includes(activeTab) && !cumulative
   const showPositionSelector = ['radar', 'summary'].includes(activeTab)
   const showCumulative       = ['shotmap', 'summary'].includes(activeTab) && isFullInfographicLeague
+  const canShowInfographic   = !showNotAvailable && Boolean(effectivePlayerId)
 
   function handleTabChange(id: string) {
     setActiveTab(id)
@@ -169,6 +248,36 @@ export default function PlayerPage() {
           <div style={{ width: '100%', maxWidth: 672 }}>
             <CoverageNotice kind="player" />
           </div>
+        ) : resolvingPlayer ? (
+          <div style={{
+            width: '100%',
+            maxWidth: 672,
+            minHeight: 320,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 8,
+            background: '#0b0f16',
+            color: '#4d5e7a',
+            fontSize: 13,
+          }}>
+            Loading player data…
+          </div>
+        ) : !effectivePlayerId ? (
+          <div style={{
+            width: '100%',
+            maxWidth: 672,
+            minHeight: 320,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 8,
+            background: '#0b0f16',
+            color: '#4d5e7a',
+            fontSize: 13,
+          }}>
+            Player data unavailable
+          </div>
         ) : (
           <InfographicViewer
             src={imgSrc()}
@@ -179,7 +288,7 @@ export default function PlayerPage() {
       </div>
 
       {/* Download link — only when infographic is shown */}
-      {!showNotAvailable && (
+      {canShowInfographic && (
         <div style={{ textAlign: 'center' }}>
           <a
             href={imgSrc()}
