@@ -70,7 +70,7 @@ def render(
         opp_crests = [o.get("crest_url", "") for o in opponents]
     else:
         opp_names  = [h.get("opponent", "")[:3].upper() for h in history]
-        opp_crests = [""] * len(history)
+        opp_crests = [h.get("opponent_crest", "") for h in history]
 
     # Pre-fetch crest images (best-effort, non-blocking via list comprehension)
     use_logos = any(opp_crests)
@@ -84,7 +84,7 @@ def render(
     bar_colors = [_bar_color.get(r, GREEN) for r in results]
 
     # Extra bottom margin when showing logos
-    bottom_margin = 0.16 if use_logos else 0.10
+    bottom_margin = 0.18 if use_logos else 0.10
     fig = plt.figure(figsize=(12, 9), facecolor=BG)
 
     # ── Title ──────────────────────────────────────────────────────────────────
@@ -158,13 +158,22 @@ def render(
         ax_bar.text(xs[i] + bar_w / 2, xga_per[i] + 0.04, str(ga),
                     ha="center", fontsize=6, color=TEXT_SUB, fontproperties=font)
 
-    # X-axis labels — show opponent abbrev + H/A every match (or every 2nd on long seasons)
+    # X-axis labels — show H/A + crests when available; otherwise use opponent abbrevs.
     n    = len(matches)
-    step = 1 if n <= 20 else 2
+    step = 1 if n <= 20 or use_logos else 2
     tick_idx = list(range(0, n, step))
     ax_bar.set_xticks([xs[i] for i in tick_idx])
 
-    if opp_names:
+    if use_logos:
+        labels = [
+            (
+                h_a[i]
+                if i < len(crest_imgs) and crest_imgs[i] is not None
+                else f"{h_a[i]}\n{opp_names[i]}" if i < len(opp_names) else h_a[i]
+            )
+            for i in tick_idx
+        ]
+    elif opp_names:
         labels = [
             f"{h_a[i]}\n{opp_names[i]}" if i < len(opp_names) else h_a[i]
             for i in tick_idx
@@ -204,17 +213,19 @@ def render(
         for i, img_arr in enumerate(crest_imgs):
             if img_arr is None or i not in tick_idx:
                 continue
-            oi = OffsetImage(img_arr, zoom=0.55)
+            oi = OffsetImage(img_arr, zoom=0.58)
             oi.image.axes = ax_bar
             ab = AnnotationBbox(
                 oi,
                 (xs[i], 0),
-                xybox=(0, -22),
+                xybox=(0, -24),
                 xycoords=("data", "axes fraction"),
                 boxcoords="offset points",
                 frameon=False,
                 pad=0,
+                annotation_clip=False,
             )
+            ab.set_clip_on(False)
             ax_bar.add_artist(ab)
 
     # ── Season summary footer ──────────────────────────────────────────────────

@@ -208,6 +208,69 @@ def _resolve_fdorg_team_id(
     return ""
 
 
+def _match_key(row: dict) -> tuple[str, str, int, int]:
+    return (
+        str(row.get("date", ""))[:10],
+        str(row.get("h_a", "")).upper(),
+        int(row.get("goals") or 0),
+        int(row.get("goals_against") or 0),
+    )
+
+
+def _enrich_history_opponents(history: list[dict], results: list[dict]) -> list[dict]:
+    """Copy opponent names/crests onto xG rows from a matching match-results feed."""
+    if not history or not results:
+        return history
+
+    by_match: dict[tuple[str, str, int, int], list[dict]] = {}
+    for result in results:
+        by_match.setdefault(_match_key(result), []).append(result)
+
+    can_fallback_by_index = len(history) == len(results)
+    enriched: list[dict] = []
+    for idx, row in enumerate(history):
+        match = None
+        bucket = by_match.get(_match_key(row))
+        if bucket:
+            match = bucket.pop(0)
+        elif can_fallback_by_index:
+            match = results[idx]
+
+        if not match:
+            enriched.append(row)
+            continue
+
+        merged = dict(row)
+        merged["opponent"] = merged.get("opponent") or match.get("opponent", "")
+        merged["opponent_crest"] = (
+            merged.get("opponent_crest") or match.get("opponent_crest", "")
+        )
+        enriched.append(merged)
+    return enriched
+
+
+def _enrich_history_from_fdorg(
+    history: list[dict],
+    team_id: str,
+    team_name: str,
+    league_id: str | None,
+    season: int,
+) -> list[dict]:
+    if not history or not league_id:
+        return history
+
+    try:
+        fdorg_id = _resolve_fdorg_team_id(team_id, team_name, league_id, season)
+        if not fdorg_id:
+            return history
+        results = fdorg.get_team_results(fdorg_id, season)
+    except Exception as exc:
+        logger.debug("opponent enrichment failed for %s/%s: %s", team_name, season, exc)
+        return history
+
+    return _enrich_history_opponents(history, results)
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # PLAYER — shot based (Understat player ID)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -472,11 +535,14 @@ def team_xg_timeline_img(
         us_team    = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
         if us_team:
             us_team_id = us_team["id"]
-        ck = {"type": "team_xg_timeline", "team_id": us_team_id, "season": season}
+        ck = {"type": "team_xg_timeline", "team_id": us_team_id, "season": season, "v": 2}
         if cached := cache.img_get("infographic", ck):
             return _png(cached)
         try:
             history = understat.get_team_xg_history(us_team_id, season, league=us_slug)
+            history = _enrich_history_from_fdorg(
+                history, team_id, team_name, league_id, season
+            )
         except Exception as exc:
             logger.error(f"team xg timeline {us_team_id}/{season}: {exc}")
 
@@ -486,7 +552,7 @@ def team_xg_timeline_img(
         if fm_tid:
             has_xg = True
             ck = {"type": "team_timeline_fotmob", "fm_tid": fm_tid,
-                  "league_id": fm_league_id, "season": season}
+                  "league_id": fm_league_id, "season": season, "v": 2}
             if cached := cache.img_get("infographic", ck):
                 return _png(cached)
             try:
@@ -505,7 +571,7 @@ def team_xg_timeline_img(
             )
             if matched and str(matched.get("team_id", "")).isdigit():
                 fdorg_id = str(matched["team_id"])
-        ck = {"type": "team_timeline_fdorg", "team_id": fdorg_id, "season": season}
+        ck = {"type": "team_timeline_fdorg", "team_id": fdorg_id, "season": season, "v": 2}
         if cached := cache.img_get("infographic", ck):
             return _png(cached)
         try:
@@ -517,7 +583,11 @@ def team_xg_timeline_img(
         raise HTTPException(503, "No match data available for this team/season")
 
     opponents: list[dict] | None = [
-        {"name": h.get("opponent", ""), "crest_url": ""} for h in history
+        {
+            "name": h.get("opponent", ""),
+            "crest_url": h.get("opponent_crest", ""),
+        }
+        for h in history
     ]
 
     png = team_xg_timeline.render(team_name, _season_label(season), history,

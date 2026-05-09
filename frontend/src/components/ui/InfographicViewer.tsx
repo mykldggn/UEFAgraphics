@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { createPortal } from 'react-dom'
 
 interface Props {
   src: string
@@ -17,10 +18,72 @@ export default function InfographicViewer({ src, alt, className = '' }: Props) {
 
   useEffect(() => {
     if (!lightbox) return
-    const handle = (e: KeyboardEvent) => { if (e.key === 'Escape') setLightbox(false) }
-    window.addEventListener('keydown', handle)
-    return () => window.removeEventListener('keydown', handle)
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightbox(false)
+    }
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    window.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.body.style.overflow = previousOverflow
+      window.removeEventListener('keydown', handleKeyDown)
+    }
   }, [lightbox])
+
+  const lightboxOverlay = lightbox ? (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={`${alt} zoomed preview`}
+      onMouseDown={e => {
+        if (e.target === e.currentTarget) setLightbox(false)
+      }}
+      style={{
+        position: 'fixed', inset: 0, zIndex: 9999,
+        background: 'rgba(0,0,0,0.92)',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        padding: 20,
+        cursor: 'zoom-out',
+      }}
+    >
+      <img
+        src={src}
+        alt={alt}
+        draggable={false}
+        style={{
+          maxWidth: '96vw',
+          maxHeight: '94vh',
+          objectFit: 'contain',
+          borderRadius: 10,
+          boxShadow: '0 12px 60px rgba(0,0,0,0.8)',
+          cursor: 'default',
+          userSelect: 'none',
+        }}
+      />
+      <button
+        type="button"
+        aria-label="Close zoomed infographic"
+        onMouseDown={e => e.stopPropagation()}
+        onClick={() => setLightbox(false)}
+        style={{
+          position: 'fixed', top: 16, right: 16, zIndex: 10000,
+          background: 'rgba(12,19,33,0.95)',
+          border: '1px solid #2c3854',
+          borderRadius: '50%',
+          width: 42, height: 42,
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer',
+          color: '#e6e9f4',
+          fontSize: 18,
+          lineHeight: 1,
+          fontWeight: 700,
+          boxShadow: '0 8px 28px rgba(0,0,0,0.45)',
+        }}
+      >
+        X
+      </button>
+    </div>
+  ) : null
 
   return (
     <>
@@ -102,50 +165,7 @@ export default function InfographicViewer({ src, alt, className = '' }: Props) {
         )}
       </div>
 
-      {/* Lightbox overlay */}
-      {lightbox && (
-        <div
-          onClick={() => setLightbox(false)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 1000,
-            background: 'rgba(0,0,0,0.92)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            padding: 20,
-            cursor: 'zoom-out',
-          }}
-        >
-          <img
-            src={src}
-            alt={alt}
-            onClick={e => e.stopPropagation()}
-            style={{
-              maxWidth: '96vw',
-              maxHeight: '94vh',
-              objectFit: 'contain',
-              borderRadius: 10,
-              boxShadow: '0 12px 60px rgba(0,0,0,0.8)',
-              cursor: 'default',
-            }}
-          />
-          <button
-            onClick={() => setLightbox(false)}
-            style={{
-              position: 'fixed', top: 16, right: 16,
-              background: 'rgba(12,19,33,0.9)',
-              border: '1px solid #1a2235',
-              borderRadius: '50%',
-              width: 38, height: 38,
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              cursor: 'pointer',
-              color: '#e6e9f4',
-              fontSize: 17,
-              lineHeight: 1,
-            }}
-          >
-            ✕
-          </button>
-        </div>
-      )}
+      {lightboxOverlay ? createPortal(lightboxOverlay, document.body) : null}
     </>
   )
 }

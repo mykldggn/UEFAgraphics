@@ -481,7 +481,7 @@ def get_team_season_xg(
                cumulative_goals, cumulative_goals_against.
     """
     tid  = int(fm_team_id)
-    ck   = {"tid": tid, "fm_league": fm_league_id, "season": season_year or "current"}
+    ck   = {"tid": tid, "fm_league": fm_league_id, "season": season_year or "current", "v": 2}
     cached = cache.json_get("fotmob_team_season_xg", ck, ttl_hours=3)
     if cached is not None:
         return cached
@@ -504,6 +504,7 @@ def get_team_season_xg(
         is_home  = home_id == tid
         opp      = away if is_home else home
         opp_name = opp.get("longName") or opp.get("name", "")
+        opp_crest = _crest_url(opp.get("id"))
 
         try:
             gf = int(home.get("score", 0) if is_home else away.get("score", 0))
@@ -522,6 +523,7 @@ def get_team_season_xg(
         team_matches.append({
             "date":          date,
             "opponent":      opp_name,
+            "opponent_crest": opp_crest,
             "goals":         gf,
             "goals_against": ga,
             "result":        result,

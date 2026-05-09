@@ -194,7 +194,7 @@ def get_team_results(fdorg_team_id: str, season: int) -> list[dict]:
     Used as fallback for non-Understat leagues (no xG available).
     Each dict: match, date, opponent, goals, goals_against, result, h_a
     """
-    ck = {"src": "fdorg", "team_id": fdorg_team_id, "season": season, "type": "results"}
+    ck = {"src": "fdorg", "team_id": fdorg_team_id, "season": season, "type": "results", "v": 2}
     cached = cache.json_get("fdorg_team_results", ck, ttl_hours=6)
     if cached is not None:
         return cached
@@ -217,13 +217,15 @@ def get_team_results(fdorg_team_id: str, season: int) -> list[dict]:
         gf        = int(home_s if is_home else away_s)
         ga        = int(away_s if is_home else home_s)
         opp_key   = "awayTeam" if is_home else "homeTeam"
-        opponent  = m.get(opp_key, {}).get("shortName") or m.get(opp_key, {}).get("name", "")
+        opp_team  = m.get(opp_key, {}) or {}
+        opponent  = opp_team.get("shortName") or opp_team.get("name", "")
         if gf > ga:   result = "w"
         elif gf == ga: result = "d"
         else:          result = "l"
         results.append({
             "date":          m.get("utcDate", "")[:10],
             "opponent":      opponent,
+            "opponent_crest": opp_team.get("crest", ""),
             "goals":         gf,
             "goals_against": ga,
             "result":        result,
