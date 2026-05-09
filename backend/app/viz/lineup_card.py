@@ -505,6 +505,13 @@ def _assign_players_to_slots(
             if id(player) in used:
                 continue
             abbr = _abbr_for_player(player, pos_hints)
+            understat_abbr = _understat_abbr(player)
+            if (
+                slot in {"LCM", "CM", "RCM"}
+                and abbr in {"LM", "RM"}
+                and understat_abbr in {"CM", "CDM", "CAM"}
+            ):
+                abbr = understat_abbr
             score = _role_match_score(slot, abbr) + _total_mins(player)
             if place_hints:
                 place = _lookup_place(player, place_hints)
