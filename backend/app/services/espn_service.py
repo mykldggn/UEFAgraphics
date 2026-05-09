@@ -271,14 +271,18 @@ def get_team_lineup_hints(
         match_formation = lineup.get("formation", "")
         for p in lineup.get("players", []):
             name = p.get("name", "")
+            full = _normalize(name) if name else ""
             last = _normalize(name.split()[-1]) if name else ""
             pos  = _derive_pos(match_formation, p.get("place"), p.get("pos", ""))
-            if last and pos:
-                pos_votes[last].append(pos)
+            keys = {k for k in (full, last) if k}
+            for key in keys:
+                if pos:
+                    pos_votes[key].append(pos)
             raw_place = p.get("place")
-            if last and raw_place is not None and match_formation:
+            if keys and raw_place is not None and match_formation:
                 try:
-                    place_votes[last].append((match_formation, float(raw_place)))
+                    for key in keys:
+                        place_votes[key].append((match_formation, float(raw_place)))
                 except (TypeError, ValueError):
                     pass
 
@@ -299,3 +303,55 @@ def get_team_lineup_hints(
         place_hints = {k: sum(v) / len(v) for k, v in filtered.items()} if filtered else None
 
     return pos_hints, formation, place_hints
+
+
+def get_goalkeeper_candidates(
+    team_name: str,
+    internal_league_id: str,
+    season: int,
+    num_matches: int = 8,
+) -> list[dict]:
+    """Return recent starting goalkeepers as synthetic player rows for lineup fallback."""
+    league_slug = ESPN_LEAGUES.get(internal_league_id)
+    if not league_slug:
+        return []
+
+    espn_team_id = get_espn_team_id(team_name, league_slug)
+    if not espn_team_id:
+        return []
+
+    event_ids = get_recent_event_ids(espn_team_id, league_slug, last=num_matches)
+    if not event_ids:
+        return []
+
+    starts: Counter = Counter()
+    display: dict[str, str] = {}
+    for eid in event_ids:
+        lineup = get_event_lineup(eid, team_name, league_slug)
+        if not lineup:
+            continue
+        for p in lineup.get("players", []):
+            pos = str(p.get("pos", "")).upper()
+            place = p.get("place")
+            if pos not in {"G", "GK"} and str(place) != "1":
+                continue
+            name = p.get("name", "")
+            key = _normalize(name)
+            if key:
+                starts[key] += 1
+                display[key] = name
+
+    candidates = []
+    for key, count in starts.most_common():
+        name = display[key]
+        candidates.append({
+            "player": name,
+            "player_name": name,
+            "position": "GK",
+            "pos": "GK",
+            "minutes": count * 90,
+            "apps": count,
+            "id": f"espn-gk-{key}",
+            "source": "espn",
+        })
+    return candidates

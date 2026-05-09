@@ -15,6 +15,7 @@ env/
 *.env
 
 # Cache dirs
+cache/
 backend/cache/
 backend/soccerdata_cache/
 

@@ -1,12 +1,15 @@
-import { useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useState, useEffect } from 'react'
+import { useParams, useSearchParams, useNavigate, Link } from 'react-router-dom'
 import TabBar from '../components/ui/TabBar'
 import InfographicViewer from '../components/ui/InfographicViewer'
 import Select from '../components/ui/Select'
 import { infographicsApi } from '../api/infographics'
-import { SEASONS } from '../utils/constants'
-
-const UNDERSTAT_LEAGUES = new Set(['ENG-1', 'ESP-1', 'DEU-1', 'ITA-1', 'FRA-1'])
+import {
+  SEASONS,
+  LEAGUE_LABELS,
+  FULL_INFOGRAPHIC_LEAGUES,
+  FULL_INFOGRAPHIC_SUPPORT_LABEL,
+} from '../utils/constants'
 
 const SEASON_OPTS = SEASONS.map(s => ({ value: s, label: `${s}/${String(s + 1).slice(-2)}` }))
 
@@ -31,7 +34,7 @@ const TABS = [
 
 
 function NotAvailableCard({ tab }: { tab: string }) {
-  const label = tab === 'shotmap' ? 'Shot Map' : 'Career xG'
+  const label = TABS.find(t => t.id === tab)?.label ?? 'Infographic'
   return (
     <div style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center',
@@ -48,8 +51,11 @@ function NotAvailableCard({ tab }: { tab: string }) {
           {label} not available
         </div>
         <div style={{ color: '#4d5e7a', fontSize: 13, maxWidth: 340, lineHeight: 1.6 }}>
-          Shot-level data with xG coordinates is only available for top-5 league players
-          (Premier League, La Liga, Bundesliga, Serie A, Ligue 1) via Understat.
+          This player infographic requires full current-season Understat coverage across
+          player, team, and league views.
+        </div>
+        <div style={{ color: '#1e2c44', fontSize: 11, maxWidth: 360, lineHeight: 1.5, marginTop: 8 }}>
+          Supported: {FULL_INFOGRAPHIC_SUPPORT_LABEL}
         </div>
       </div>
     </div>
@@ -59,13 +65,22 @@ function NotAvailableCard({ tab }: { tab: string }) {
 export default function PlayerPage() {
   const { playerId }       = useParams<{ playerId: string }>()
   const [params]           = useSearchParams()
+  const navigate           = useNavigate()
   const leagueId  = params.get('league') ?? 'ENG-1'
-  const isTopFive = UNDERSTAT_LEAGUES.has(leagueId)
+  const leagueLabel = LEAGUE_LABELS[leagueId] ?? leagueId
+  const isFullInfographicLeague = FULL_INFOGRAPHIC_LEAGUES.has(leagueId)
 
-  const [activeTab, setActiveTab]   = useState('shotmap')
+  const urlTab = params.get('tab') ?? 'shotmap'
+  const [activeTab, setActiveTab]   = useState(urlTab)
   const [season, setSeason]         = useState(Number(params.get('season') ?? 2025))
   const [position, setPosition]     = useState('FW')
   const [cumulative, setCumulative] = useState(false)
+
+  // Sync tab from URL when navigating back/forward
+  useEffect(() => {
+    const t = params.get('tab') ?? 'shotmap'
+    setActiveTab(t)
+  }, [params])
 
   if (!playerId) return null
 
@@ -73,8 +88,7 @@ export default function PlayerPage() {
     ? decodeURIComponent(params.get('name')!)
     : playerId
 
-  const UNDERSTAT_ONLY_TABS = new Set(['shotmap', 'career-xg', 'xg-arc', 'shot-quality', 'shot-situation', 'rolling-form'])
-  const showNotAvailable = !isTopFive && UNDERSTAT_ONLY_TABS.has(activeTab)
+  const showNotAvailable = !isFullInfographicLeague
 
   function imgSrc(): string {
     switch (activeTab) {
@@ -103,10 +117,31 @@ export default function PlayerPage() {
 
   const showSeasonSelector   = ['shotmap', 'radar', 'summary', 'xg-arc', 'shot-quality', 'shot-situation', 'rolling-form'].includes(activeTab) && !cumulative
   const showPositionSelector = ['radar', 'summary'].includes(activeTab)
-  const showCumulative       = ['shotmap', 'summary'].includes(activeTab) && isTopFive
+  const showCumulative       = ['shotmap', 'summary'].includes(activeTab) && isFullInfographicLeague
+
+  function handleTabChange(id: string) {
+    setActiveTab(id)
+    setCumulative(false)
+    const p = new URLSearchParams(params)
+    p.set('tab', id)
+    navigate(`?${p.toString()}`, { replace: true })
+  }
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+
+      {/* Breadcrumb */}
+      <div>
+        <Link
+          to={`/?tab=Player&league=${leagueId}&season=${season}`}
+          style={{ fontSize: 12, color: '#4d5e7a', textDecoration: 'none', transition: 'color 0.15s' }}
+          onMouseEnter={e => (e.currentTarget.style.color = '#c9a84c')}
+          onMouseLeave={e => (e.currentTarget.style.color = '#4d5e7a')}
+        >
+          ← {leagueLabel} {season}/{String(season + 1).slice(-2)}
+        </Link>
+      </div>
+
       {/* Header strip */}
       <div style={{
         background: 'linear-gradient(90deg, rgba(201,168,76,0.10), transparent)',
@@ -156,7 +191,7 @@ export default function PlayerPage() {
         </div>
       </div>
 
-      <TabBar tabs={TABS} active={activeTab} onChange={tab => { setActiveTab(tab); setCumulative(false) }} />
+      <TabBar tabs={TABS} active={activeTab} onChange={handleTabChange} />
 
       {/* Infographic */}
       <div style={{ display: 'flex', justifyContent: 'center' }}>

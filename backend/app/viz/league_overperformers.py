@@ -78,7 +78,7 @@ def render(
         mpatches.Patch(color=RED,   label="Underperforming xG"),
     ]
     ax.legend(handles=legend_patches, frameon=False, labelcolor=TEXT,
-              prop=font, fontsize=8.5, loc="lower right")
+              prop=font, fontsize=8.5, loc="upper right")
 
     fig.text(
         0.5, 0.97,

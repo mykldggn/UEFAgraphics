@@ -51,6 +51,7 @@ _TSDB_LEAGUE_NAME: dict[str, str] = {
     "BEL-1":    "Belgian First Division A",
     "SCO-1":    "Scottish Premier League",
     "TUR-1":    "Turkish Süper Lig",
+    "AUS-1":    "Australian A-League",
     "UEFA-CL":  "UEFA Champions League",
     "UEFA-EL":  "UEFA Europa League",
 }

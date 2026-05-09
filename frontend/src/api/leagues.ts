@@ -4,6 +4,7 @@ export interface League {
   id: string
   label: string
   country: string
+  coverage?: string
 }
 
 export interface Team {
@@ -22,12 +23,15 @@ export interface Player {
 
 export interface TableRow {
   team: string
+  rank?: number
   points?: number
   wins?: number
   draws?: number
   losses?: number
   goals_for?: number
   goals_against?: number
+  goal_diff?: number
+  form?: string
   [key: string]: unknown
 }
 

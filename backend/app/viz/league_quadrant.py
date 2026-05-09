@@ -45,10 +45,12 @@ def render(
     for sp in ax.spines.values():
         sp.set_edgecolor("#374151")
 
-    x_min = min(xg_vals)  * 0.88
-    x_max = max(xg_vals)  * 1.12
-    y_min = min(xga_vals) * 0.88
-    y_max = max(xga_vals) * 1.12
+    x_pad = (max(xg_vals)  - min(xg_vals))  * 0.12
+    y_pad = (max(xga_vals) - min(xga_vals)) * 0.12
+    x_min = min(xg_vals)  - x_pad
+    x_max = max(xg_vals)  + x_pad
+    y_min = min(xga_vals) - y_pad
+    y_max = max(xga_vals) + y_pad
 
     # Quadrant fills (inverted y: low xGA = top)
     # top-right (high xG, low xGA) → GREEN = Title Contenders
@@ -66,27 +68,32 @@ def render(
 
     # Quadrant corner labels
     q_kw = dict(fontsize=9, fontproperties=font, color=TEXT_SUB, alpha=0.5, zorder=2)
-    ax.text(x_max * 0.998, y_min * 1.005, "Title Contenders",
+    ax.text(x_max - x_range * 0.01, y_min + y_range * 0.01, "Title Contenders",
             ha="right", va="bottom", **q_kw)
-    ax.text(x_max * 0.998, y_max * 0.998, "High Scoring",
+    ax.text(x_max - x_range * 0.01, y_max - y_range * 0.01, "High Scoring",
             ha="right", va="top", **q_kw)
-    ax.text(x_min * 1.002, y_min * 1.005, "Resolute",
+    ax.text(x_min + x_range * 0.01, y_min + y_range * 0.01, "Resolute",
             ha="left", va="bottom", **q_kw)
-    ax.text(x_min * 1.002, y_max * 0.998, "Relegation Battle",
+    ax.text(x_min + x_range * 0.01, y_max - y_range * 0.01, "Relegation Battle",
             ha="left", va="top", **q_kw)
 
     ax.axvline(mean_xg,  color=TEXT_SUB, lw=1.2, ls="--", alpha=0.6, zorder=2)
     ax.axhline(mean_xga, color=TEXT_SUB, lw=1.2, ls="--", alpha=0.6, zorder=2)
 
+    x_range = x_max - x_min
+    y_range = y_max - y_min
+
     for name, x, y in zip(names, xg_vals, xga_vals):
         color = team_color(name)
         ax.scatter(x, y, s=180, color=color, edgecolors=BG, lw=1.5, zorder=4)
 
-        # Simple offset to avoid label overlap
-        offset_x = 0.8
-        offset_y = -0.5
-        ax.text(x + offset_x, y + offset_y, name, fontsize=7,
-                color=TEXT, fontproperties=font, va="center", zorder=5)
+        # Place label left/right and above/below based on position relative to mean
+        ha = "left" if x >= mean_xg else "right"
+        va = "bottom" if y >= mean_xga else "top"
+        dx = x_range * 0.012 if ha == "left" else -x_range * 0.012
+        dy = y_range * 0.012 if va == "bottom" else -y_range * 0.012
+        ax.text(x + dx, y + dy, name, fontsize=7,
+                color=TEXT, fontproperties=font, ha=ha, va=va, zorder=5)
 
     ax.invert_yaxis()
     ax.set_xlim(x_min, x_max)

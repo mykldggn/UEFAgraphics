@@ -32,11 +32,17 @@ FOTMOB_LEAGUES: dict[str, int] = {
     # Others
     "ENG-2":  48,   # Championship
     "ENG-3":  49,   # League One
+    "ENG-4":  109,  # League Two
     "NED-1":  57,   # Eredivisie
     "PRT-1":  61,   # Primeira Liga
     "SCO-1":  58,   # Scottish Premiership
     "BEL-1":  59,   # Pro League
+    "CHE-1":  69,   # Swiss Super League
     "TUR-1":  71,   # Süper Lig
+    "GRC-1":  135,  # Super League Greece
+    "AUT-1":  38,   # Austrian Bundesliga
+    "AUS-1":  113,  # A-League Men
+    "RUS-1":  63,   # Russian Premier League
     # Europe
     "UEFA-CL": 42,  # Champions League
     "UEFA-EL": 73,  # Europa League

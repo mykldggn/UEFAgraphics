@@ -53,14 +53,14 @@ def render(
         goals_list.append(g)
         xg_list.append(xg)
 
-        # Bar color: over-performing = GREEN, under = RED
+        # Bar color: over-performing = GREEN, under = RED, on track = ACCENT
         tol = 1.5
         if g > xg + tol:
             colors.append(GREEN)
         elif g < xg - tol:
             colors.append(RED)
         else:
-            colors.append(team_color(tname))
+            colors.append(ACCENT)
 
     ys = np.arange(len(top15))
 

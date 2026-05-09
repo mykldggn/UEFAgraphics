@@ -9,7 +9,13 @@ import TabBar from '../components/ui/TabBar'
 import InfographicViewer from '../components/ui/InfographicViewer'
 import { leaguesApi, type TableRow, type LeaderEntry } from '../api/leagues'
 import { infographicsApi } from '../api/infographics'
-import { SEASONS, CURRENT_SEASON } from '../utils/constants'
+import {
+  SEASONS,
+  CURRENT_SEASON,
+  LEAGUE_LABELS,
+  FULL_INFOGRAPHIC_LEAGUES,
+  FULL_INFOGRAPHIC_SUPPORT_LABEL,
+} from '../utils/constants'
 
 
 const SEASON_OPTS = SEASONS.map(s => ({ value: s, label: `${s}/${String(s + 1).slice(-2)}` }))
@@ -330,6 +336,15 @@ export default function LeaguePage() {
 
   useEffect(() => {
     if (!leagueId) return
+    if (!FULL_INFOGRAPHIC_LEAGUES.has(leagueId)) {
+      setTable([])
+      setPosHistory(null)
+      setLeaders(null)
+      setTeamColors({})
+      setLoading(false)
+      setError(null)
+      return
+    }
     setLoading(true); setError(null)
     setTable([]); setPosHistory(null); setLeaders(null)
 
@@ -376,8 +391,9 @@ export default function LeaguePage() {
   }
   const numTeams = posHistory?.teams.length ?? 20
 
-  const leagueName = leagueId.replace('-', ' ')
+  const leagueName = LEAGUE_LABELS[leagueId] ?? leagueId
   const numInLeague = table.length || 20
+  const isFullInfographicLeague = FULL_INFOGRAPHIC_LEAGUES.has(leagueId ?? '')
 
   function posZoneColor(pos: number): string {
     const zones = leagueId ? LEAGUE_ZONES[leagueId] : undefined
@@ -422,9 +438,6 @@ export default function LeaguePage() {
     return null
   }
 
-  const UNDERSTAT_LEAGUES = new Set(['ENG-1', 'ESP-1', 'DEU-1', 'ITA-1', 'FRA-1'])
-  const isUnderstatLeague = UNDERSTAT_LEAGUES.has(leagueId ?? '')
-
   function handleTeamClick(row: TableRow) {
     // Use the numeric fdorg team_id in the URL so non-top-5 infographics can fetch match results.
     // team_name is passed as a query param for display + matching purposes.
@@ -433,8 +446,7 @@ export default function LeaguePage() {
   }
 
   function handlePlayerClick(player: string, _team: string) {
-    const source = isUnderstatLeague ? 'understat' : 'fotmob'
-    navigate(`/player/${encodeURIComponent(player)}?season=${season}&league=${leagueId}&source=${source}&name=${encodeURIComponent(player)}`)
+    navigate(`/player/${encodeURIComponent(player)}?season=${season}&league=${leagueId}&source=understat&name=${encodeURIComponent(player)}`)
   }
 
   return (
@@ -464,6 +476,27 @@ export default function LeaguePage() {
         <Select value={season} options={SEASON_OPTS} onChange={v => setSeason(Number(v))} />
       </div>
 
+      {!isFullInfographicLeague ? (
+        <div style={{
+          background: '#0c1321',
+          border: '1px solid #1a2235',
+          borderRadius: 8,
+          padding: '48px 32px',
+          textAlign: 'center',
+        }}>
+          <div style={{ color: '#e6e9f4', fontSize: 15, fontWeight: 600, marginBottom: 8 }}>
+            League infographics unavailable
+          </div>
+          <div style={{ color: '#4d5e7a', fontSize: 13, maxWidth: 520, margin: '0 auto', lineHeight: 1.6 }}>
+            This league is not shown in the infographic selector because full current-season
+            Player, Team, and League coverage cannot be replicated at Understat quality yet.
+          </div>
+          <div style={{ color: '#1e2c44', fontSize: 11, marginTop: 10 }}>
+            Supported: {FULL_INFOGRAPHIC_SUPPORT_LABEL}
+          </div>
+        </div>
+      ) : (
+        <>
       <TabBar tabs={PAGE_TABS} active={activeTab} onChange={setActiveTab} />
 
 {loading && (
@@ -709,7 +742,7 @@ export default function LeaguePage() {
           !error && (
             <div style={{ textAlign: 'center', padding: '48px 0' }}>
               <p style={{ color: '#4d5e7a', fontSize: 13, marginBottom: 6 }}>Position history is only available for Understat leagues.</p>
-              <p style={{ color: '#1e2c44', fontSize: 11 }}>Supported: Premier League · La Liga · Bundesliga · Serie A · Ligue 1</p>
+            <p style={{ color: '#1e2c44', fontSize: 11 }}>Supported: {FULL_INFOGRAPHIC_SUPPORT_LABEL}</p>
             </div>
           )
         )
@@ -719,11 +752,11 @@ export default function LeaguePage() {
       {!loading && activeTab === 'leaders' && (
         leaders ? (
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 14 }}>
-            <LeaderBoard title="Top Scorers"   entries={leaders.goals ?? []}      onPlayerClick={isUnderstatLeague ? handlePlayerClick : undefined} />
-            <LeaderBoard title="Top Assisters" entries={leaders.assists ?? []}    onPlayerClick={isUnderstatLeague ? handlePlayerClick : undefined} />
-            {(leaders.xg ?? []).length > 0 && <LeaderBoard title="xG Leaders"    entries={leaders.xg ?? []}         onPlayerClick={isUnderstatLeague ? handlePlayerClick : undefined} />}
-            {(leaders.key_passes ?? []).length > 0 && <LeaderBoard title="Key Passes" entries={leaders.key_passes ?? []} onPlayerClick={isUnderstatLeague ? handlePlayerClick : undefined} />}
-            {(leaders.shots ?? []).length > 0 && <LeaderBoard title="Most Shots"  entries={leaders.shots ?? []}      onPlayerClick={isUnderstatLeague ? handlePlayerClick : undefined} />}
+            <LeaderBoard title="Top Scorers"   entries={leaders.goals ?? []}      onPlayerClick={handlePlayerClick} />
+            <LeaderBoard title="Top Assisters" entries={leaders.assists ?? []}    onPlayerClick={handlePlayerClick} />
+            {(leaders.xg ?? []).length > 0 && <LeaderBoard title="xG Leaders"    entries={leaders.xg ?? []}         onPlayerClick={handlePlayerClick} />}
+            {(leaders.key_passes ?? []).length > 0 && <LeaderBoard title="Key Passes" entries={leaders.key_passes ?? []} onPlayerClick={handlePlayerClick} />}
+            {(leaders.shots ?? []).length > 0 && <LeaderBoard title="Most Shots"  entries={leaders.shots ?? []}      onPlayerClick={handlePlayerClick} />}
           </div>
         ) : (
           !error && <div style={{ textAlign: 'center', padding: '48px 0', color: '#4d5e7a', fontSize: 13 }}>Leaders not available for this league.</div>
@@ -734,13 +767,13 @@ export default function LeaguePage() {
       {(['xg-table', 'quadrant', 'golden-boot', 'form-table', 'overperformers'] as const).map(tab => {
         if (activeTab !== tab) return null
         const xgOnly = tab !== 'form-table'
-        if (xgOnly && !isUnderstatLeague) return (
+        if (xgOnly && !isFullInfographicLeague) return (
           <div key={tab} style={{ textAlign: 'center', padding: '48px 0' }}>
             <p style={{ color: '#4d5e7a', fontSize: 13, marginBottom: 6 }}>
               This chart requires xG data (Understat leagues only).
             </p>
             <p style={{ color: '#1e2c44', fontSize: 11 }}>
-              Supported: Premier League · La Liga · Bundesliga · Serie A · Ligue 1
+              Supported: {FULL_INFOGRAPHIC_SUPPORT_LABEL}
             </p>
           </div>
         )
@@ -764,6 +797,8 @@ export default function LeaguePage() {
           </div>
         )
       })}
+        </>
+      )}
     </div>
   )
 }

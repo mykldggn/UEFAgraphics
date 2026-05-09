@@ -9,6 +9,7 @@ Data sources:
 from __future__ import annotations
 
 import logging
+import unicodedata
 
 import numpy as np
 import pandas as pd
@@ -19,7 +20,9 @@ from app.core import cache
 from app.services import football_data_service as fdorg
 from app.services import understat_service as understat
 from app.services import fotmob_service as fotmob
+from app.services import api_football_service as api_football
 from app.services import espn_service as espn
+from app.services import transfermarkt_service as transfermarkt
 from app.viz import (
     shotmap,
     radar as radar_viz,
@@ -65,6 +68,144 @@ def _png(data: bytes) -> Response:
 
 def _season_label(season: int) -> str:
     return f"{season}/{str(season + 1)[-2:]}"
+
+
+def _table_stats(row: dict | None) -> dict:
+    if not row:
+        return {}
+    return {
+        "wins":          row.get("wins"),
+        "draws":         row.get("draws"),
+        "losses":        row.get("losses"),
+        "goals_for":     row.get("goals_for"),
+        "goals_against": row.get("goals_against"),
+        "goal_diff":     row.get("goal_diff"),
+        "points":        row.get("points"),
+        "final_position": row.get("rank"),
+    }
+
+
+def _merge_missing_stats(stats: dict, incoming: dict) -> None:
+    for key, value in incoming.items():
+        if value is not None and stats.get(key) in (None, ""):
+            stats[key] = value
+
+
+def _norm_name(name: str) -> str:
+    return unicodedata.normalize("NFD", name or "").encode("ascii", "ignore").decode("ascii").lower()
+
+
+def _player_name(row: dict) -> str:
+    return row.get("player") or row.get("player_name") or row.get("name") or ""
+
+
+def _is_goalkeeper(row: dict) -> bool:
+    raw = str(row.get("position") or row.get("pos") or "").upper()
+    return raw in {"G", "GK"} or "GK" in raw.split()
+
+
+def _with_goalkeeper_fallback(
+    players: list[dict],
+    team_name: str,
+    league_id: str,
+    season: int,
+) -> list[dict]:
+    """Understat sometimes lacks GK rows; add recent lineup GKs without touching outfield data."""
+    if any(_is_goalkeeper(p) for p in players):
+        return players
+
+    existing = {_norm_name(_player_name(p)) for p in players}
+    candidates = espn.get_goalkeeper_candidates(team_name, league_id, season)
+    candidates += api_football.get_goalkeeper_candidates(team_name, league_id, season)
+
+    additions: list[dict] = []
+    seen: set[str] = set()
+    for candidate in candidates:
+        key = _norm_name(_player_name(candidate))
+        if not key or key in existing or key in seen:
+            continue
+        additions.append(candidate)
+        seen.add(key)
+
+    return additions + players
+
+
+def _safe_hints_for_players(raw_hints: dict | None, players: list[dict]) -> dict | None:
+    """Keep full-name hints and only use last-name hints when they cannot collide."""
+    if not raw_hints:
+        return None
+
+    names = [_player_name(p) for p in players if _player_name(p)]
+    last_counts: dict[str, int] = {}
+    for name in names:
+        last = _norm_name(name.split()[-1])
+        if last:
+            last_counts[last] = last_counts.get(last, 0) + 1
+
+    full_hint_lasts = {
+        key.split()[-1]
+        for key in raw_hints
+        if " " in key and key.split()
+    }
+
+    safe: dict = {}
+    for name in names:
+        full = _norm_name(name)
+        last = _norm_name(name.split()[-1])
+        if full in raw_hints:
+            safe[full] = raw_hints[full]
+            if last_counts.get(last, 0) == 1:
+                safe[last] = raw_hints[full]
+        elif (
+            last in raw_hints
+            and last_counts.get(last, 0) == 1
+            and last not in full_hint_lasts
+        ):
+            safe[last] = raw_hints[last]
+
+    return safe or None
+
+
+def _merge_position_hints(players: list[dict], *hint_sets: dict | None) -> dict | None:
+    merged: dict = {}
+    for hints in hint_sets:
+        safe = _safe_hints_for_players(hints, players)
+        if safe:
+            merged.update(safe)
+    return merged or None
+
+
+def _safe_place_hints(players: list[dict], raw_hints: dict | None) -> dict | None:
+    return _safe_hints_for_players(raw_hints, players)
+
+
+def _resolve_fdorg_team_id(
+    team_id: str,
+    team_name: str,
+    league_id: str,
+    season: int,
+) -> str:
+    teams = fdorg.get_teams(league_id, season)
+    if not teams:
+        return team_id if team_id.isdigit() and league_id not in understat.LEAGUE_TO_US else ""
+
+    def matches(team: dict) -> bool:
+        return (
+            _team_match(team_name, team.get("name", ""))
+            or _team_match(team_name, team.get("short", ""))
+        )
+
+    id_match = next(
+        (t for t in teams if str(t.get("id", "")) == str(team_id) and matches(t)),
+        None,
+    )
+    if id_match:
+        return str(id_match["id"])
+
+    name_match = next((t for t in teams if matches(t)), None)
+    if name_match and str(name_match.get("id", "")).isdigit():
+        return str(name_match["id"])
+    return ""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -392,31 +533,49 @@ def team_season_card(
     league_id: str = Query(...),
     season: int    = Query(...),
 ):
-    ck = {"type": "team_season_card", "team_id": team_id, "season": season, "v": 4}
+    ck = {"type": "team_season_card", "team_id": team_id, "season": season, "v": 6}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
-    # Standings from football-data.org
+    us_slug      = understat.LEAGUE_TO_US.get(league_id)
+    fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id) if league_id else None
+
+    # Standings from football-data.org, then FotMob for leagues football-data
+    # does not cover or when team names/IDs do not line up.
     table    = fdorg.get_standings(league_id, season)
     team_row = next(
         (r for r in table if _team_match(team_name, r.get("team", ""))), None
     )
+    if not table or not team_row:
+        af_table = api_football.get_standings(league_id, season)
+        if af_table:
+            table = af_table
+            team_row = next(
+                (r for r in table if _team_match(team_name, r.get("team", ""))), None
+            )
+
+    if (not table or not team_row) and fm_league_id:
+        fm_table = fotmob.get_league_table(fm_league_id, season)
+        if fm_table:
+            table = fm_table
+            team_row = next(
+                (r for r in table if _team_match(team_name, r.get("team", ""))), None
+            )
 
     stats: dict = {}
     pos_h: list[dict] = []
     if team_row:
-        stats = {k: team_row.get(k) for k in
-                 ["wins","draws","losses","goals_for","goals_against","goal_diff","points"]}
+        stats = _table_stats(team_row)
         rank  = team_row.get("rank", 1)
-        pos_h = [{"matchday": 1,  "position": rank},
-                 {"matchday": 38, "position": rank}]
+        played = int(team_row.get("played") or 38)
+        pos_h = [{"matchday": 1, "position": rank},
+                 {"matchday": max(1, played), "position": rank}]
 
     # Top scorers from football-data.org (baseline — may be overwritten below)
     top_scorers = fdorg.get_top_scorers(league_id, season, limit=8)
+    if not top_scorers:
+        top_scorers = api_football.get_top_scorers(league_id, season, limit=8)
     top_scorers = [s for s in top_scorers if _team_match(team_name, s.get("team", ""))]
-
-    us_slug      = understat.LEAGUE_TO_US.get(league_id)
-    fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id) if league_id else None
 
     if us_slug:
         # ── Understat enrichment (top-5 leagues) ─────────────────────────────
@@ -426,6 +585,15 @@ def team_season_card(
                 (t for t in us_teams if _team_match(team_name, t["name"])), None
             )
             if us_team:
+                _merge_missing_stats(stats, {
+                    "wins":          us_team.get("wins"),
+                    "draws":         us_team.get("draws"),
+                    "losses":        us_team.get("loses"),
+                    "goals_for":     us_team.get("goals_for"),
+                    "goals_against": us_team.get("goals_against"),
+                    "goal_diff":     (us_team.get("goals_for", 0) - us_team.get("goals_against", 0)),
+                    "points":        us_team.get("pts"),
+                })
                 stats["xG"]   = us_team.get("xG")
                 stats["xGA"]  = us_team.get("xGA")
                 stats["xPts"] = us_team.get("xPts")
@@ -463,14 +631,23 @@ def team_season_card(
     elif fm_league_id:
         # ── FotMob enrichment (non-top-5 leagues) ────────────────────────────
         try:
+            if not team_row:
+                fm_table = fotmob.get_league_table(fm_league_id, season)
+                team_row = next(
+                    (r for r in fm_table if _team_match(team_name, r.get("team", ""))), None
+                )
+            _merge_missing_stats(stats, _table_stats(team_row))
+
             fm_tid = fotmob.resolve_fotmob_team_id(team_name, fm_league_id, season)
             if not fm_tid:
-                raise ValueError(f"Could not resolve FotMob team ID for {team_name}")
-            xg_hist = fotmob.get_team_season_xg(fm_tid, fm_league_id, season)
-            if xg_hist:
-                stats["xG"]  = round(sum(m["xG"]  for m in xg_hist), 1)
-                stats["xGA"] = round(sum(m["xGA"] for m in xg_hist), 1)
-                stats["clean_sheets"] = sum(1 for m in xg_hist if m.get("goals_against", 1) == 0)
+                if team_row and str(team_row.get("team_id", "")).isdigit():
+                    fm_tid = int(team_row["team_id"])
+            if fm_tid:
+                xg_hist = fotmob.get_team_season_xg(fm_tid, fm_league_id, season)
+                if xg_hist:
+                    stats["xG"]  = round(sum(m["xG"]  for m in xg_hist), 1)
+                    stats["xGA"] = round(sum(m["xGA"] for m in xg_hist), 1)
+                    stats["clean_sheets"] = sum(1 for m in xg_hist if m.get("goals_against", 1) == 0)
 
             pos_data = fotmob.get_league_position_history(fm_league_id, season)
             if pos_data:
@@ -522,8 +699,10 @@ def team_lineup_players(
     us_slug      = understat.LEAGUE_TO_US.get(league_id)
     fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id)
 
-    # ESPN lineup hints — current season, no API key needed
-    pos_hints, formation_hint, place_hints = espn.get_team_lineup_hints(team_name, league_id, season)
+    espn_pos, formation_hint, place_hints = espn.get_team_lineup_hints(team_name, league_id, season)
+    af_pos, af_formation, af_place_hints = api_football.get_team_lineup_hints(team_name, league_id, season)
+    formation_hint = formation_hint or af_formation
+    place_hints = place_hints or af_place_hints
 
     if us_slug:
         us_teams = understat.get_league_teams(us_slug, season)
@@ -532,16 +711,22 @@ def team_lineup_players(
         players  = understat.get_most_played_xi(us_slug, season, us_name)
         if not players:
             return {"players": [], "formation": ""}
+        players  = _with_goalkeeper_fallback(players, team_name, league_id, season)
+        names    = [p.get("player", "") for p in players]
+        tm_pos   = transfermarkt.get_team_position_hints(names)
+        pos_hints = _merge_position_hints(players, af_pos, espn_pos, tm_pos)
+        safe_places = _safe_place_hints(players, place_hints)
         xi, formation = lineup_viz.build_xi(
             players, pos_hints=pos_hints, forced_formation=formation_hint,
-            place_hints=place_hints)
+            place_hints=safe_places)
         player_pool = understat.get_league_player_stats(us_slug, season)
         id_map = {p["player"]: p["id"] for p in player_pool}
         return {
             "players": [
                 {"player": p["player"], "position": p["position"],
+                 "role": p.get("role"),
                  "minutes": p["minutes"], "id": id_map.get(p["player"]),
-                 "source": "understat"}
+                 "source": "understat" if id_map.get(p["player"]) else "lineup"}
                 for p in xi
             ],
             "formation": formation,
@@ -556,12 +741,17 @@ def team_lineup_players(
             )[:15]
             if not team_pl:
                 return {"players": [], "formation": ""}
+            names    = [p.get("player", p.get("player_name", "")) for p in team_pl]
+            tm_pos   = transfermarkt.get_team_position_hints(names)
+            pos_hints = _merge_position_hints(team_pl, af_pos, espn_pos, tm_pos)
+            safe_places = _safe_place_hints(team_pl, place_hints)
             xi, formation = lineup_viz.build_xi(
                 team_pl, pos_hints=pos_hints, forced_formation=formation_hint,
-                place_hints=place_hints)
+                place_hints=safe_places)
             return {
                 "players": [
                     {"player": p["player"], "position": p["position"],
+                     "role": p.get("role"),
                      "minutes": p.get("minutes", 0),
                      "id": p.get("id"), "source": "fotmob"}
                     for p in xi
@@ -581,7 +771,7 @@ def team_lineup(
     league_id: str = Query(...),
     season:    int = Query(...),
 ):
-    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 32}
+    ck = {"type": "team_lineup", "team_id": team_id, "season": season, "v": 42}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
 
@@ -595,6 +785,7 @@ def team_lineup(
         us_team  = next((t for t in us_teams if _team_match(team_name, t["name"])), None)
         us_name  = us_team["name"] if us_team else team_name
         players  = understat.get_most_played_xi(us_slug, season, us_name)
+        players  = _with_goalkeeper_fallback(players, team_name, league_id, season)
     elif fm_league_id:
         try:
             fm_players = fotmob.get_league_player_stats(fm_league_id, season)
@@ -610,10 +801,17 @@ def team_lineup(
         png = lineup_viz._no_data_png(team_name, "Lineup data unavailable", get_font())
         return _png(png)
 
-    # ESPN lineup hints — current season, no API key needed
-    pos_hints, formation_hint, place_hints = espn.get_team_lineup_hints(team_name, league_id, season)
+    espn_pos, formation_hint, place_hints = espn.get_team_lineup_hints(team_name, league_id, season)
+    af_pos, af_formation, af_place_hints = api_football.get_team_lineup_hints(team_name, league_id, season)
+    formation_hint = formation_hint or af_formation
+    place_hints = place_hints or af_place_hints
+    names     = [p.get("player", p.get("player_name", "")) for p in players]
+    tm_pos    = transfermarkt.get_team_position_hints(names)
+    pos_hints = _merge_position_hints(players, af_pos, espn_pos, tm_pos)
+    place_hints = _safe_place_hints(players, place_hints)
 
-    manager = fdorg.get_team_coach(team_id) if team_id.isdigit() else ""
+    fdorg_team_id = _resolve_fdorg_team_id(team_id, team_name, league_id, season)
+    manager = fdorg.get_team_coach(fdorg_team_id) if fdorg_team_id else ""
 
     png = lineup_viz.render(
         team_name        = team_name,
@@ -870,7 +1068,7 @@ def league_xg_table_img(league_id: str, season: int = Query(...)):
 
 @router.get("/league/{league_id}/quadrant")
 def league_quadrant_img(league_id: str, season: int = Query(...)):
-    ck = {"type": "league_quadrant", "league_id": league_id, "season": season, "v": 1}
+    ck = {"type": "league_quadrant", "league_id": league_id, "season": season, "v": 2}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
     us_slug = understat.LEAGUE_TO_US.get(league_id)
@@ -888,7 +1086,7 @@ def league_quadrant_img(league_id: str, season: int = Query(...)):
 
 @router.get("/league/{league_id}/golden-boot")
 def league_golden_boot_img(league_id: str, season: int = Query(...)):
-    ck = {"type": "league_golden_boot", "league_id": league_id, "season": season, "v": 1}
+    ck = {"type": "league_golden_boot", "league_id": league_id, "season": season, "v": 2}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
     us_slug = understat.LEAGUE_TO_US.get(league_id)
@@ -930,7 +1128,7 @@ def league_form_table_img(league_id: str, season: int = Query(...)):
 
 @router.get("/league/{league_id}/overperformers")
 def league_overperformers_img(league_id: str, season: int = Query(...)):
-    ck = {"type": "league_overperformers", "league_id": league_id, "season": season, "v": 2}
+    ck = {"type": "league_overperformers", "league_id": league_id, "season": season, "v": 3}
     if cached := cache.img_get("infographic", ck):
         return _png(cached)
     us_slug = understat.LEAGUE_TO_US.get(league_id)

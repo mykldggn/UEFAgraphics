@@ -13,17 +13,33 @@ from fastapi import APIRouter, HTTPException, Query
 from app.services import football_data_service as fdorg
 from app.services import understat_service as understat
 from app.services import fotmob_service as fotmob
+from app.services import api_football_service as api_football
 from app.services import thesportsdb_service as tsdb
 
 router = APIRouter(prefix="/leagues", tags=["leagues"])
+
+# The public infographic selector should only expose leagues where the app can
+# generate Player, Team, and League graphics at Understat depth for the current
+# season. Broader league/live-match coverage stays available to the crawler and
+# lower-level data helpers, but partial infographic coverage made the UI look
+# broken.
+FULL_INFOGRAPHIC_LEAGUES = {
+    "ENG-1",
+    "ESP-1",
+    "DEU-1",
+    "ITA-1",
+    "FRA-1",
+}
 
 
 @router.get("")
 def list_leagues():
     return [
         {"id": lid, "label": fdorg.LEAGUE_LABELS.get(lid, lid),
-         "country": fdorg.LEAGUE_COUNTRY.get(lid, "")}
+         "country": fdorg.LEAGUE_COUNTRY.get(lid, ""),
+         "coverage": "full-infographics"}
         for lid in fdorg.LEAGUE_LABELS
+        if lid in FULL_INFOGRAPHIC_LEAGUES
     ]
 
 
@@ -39,6 +55,9 @@ def get_teams(league_id: str, season: int = Query(...)):
         if us_slug:
             us_teams = understat.get_league_teams(us_slug, season)
             teams = [{"id": t["id"], "name": t["name"]} for t in us_teams]
+    if not teams:
+        teams = api_football.get_teams(league_id, season)
+
     if not teams:
         fm_id = fotmob.FOTMOB_LEAGUES.get(league_id)
         if fm_id:
@@ -79,17 +98,25 @@ def search_players(
             hits = fotmob.search_players_fotmob(q, fm_league_id)
             results = [{**h, "source": "fotmob"} for h in hits][:20]
 
-        # 3. TheSportsDB — Railway-safe fallback, always works
+        # 3. API-Football — structured fallback when a key is configured
+        if not results:
+            results = api_football.search_players(q, league_id, season)
+
+        # 4. TheSportsDB — Railway-safe metadata fallback
         if not results:
             results = tsdb.search_players(q, league_id)
 
-        return {"query": q, "results": results, "source": "fotmob" if results and results[0].get("source") != "tsdb" else "tsdb"}
+        source = results[0].get("source") if results else "fotmob"
+        return {"query": q, "results": results, "source": source}
 
-    # Last resort: TheSportsDB global search then Understat
-    results = tsdb.search_players(q, league_id)
+    # Last resort: API-Football, then TheSportsDB global search, then Understat
+    results = api_football.search_players(q, league_id, season)
+    if not results:
+        results = tsdb.search_players(q, league_id)
     if not results:
         results = understat.search_players(q)
-    return {"query": q, "results": results, "source": "tsdb" if results else "understat"}
+    source = results[0].get("source") if results else "understat"
+    return {"query": q, "results": results, "source": source}
 
 
 @router.get("/understat/search")
@@ -139,6 +166,9 @@ def league_table(league_id: str, season: int = Query(...)):
                 ]
 
     if not table:
+        table = api_football.get_standings(league_id, season)
+
+    if not table:
         fm_id = fotmob.FOTMOB_LEAGUES.get(league_id)
         if fm_id:
             table = fotmob.get_league_table(fm_id, season)
@@ -175,6 +205,24 @@ def league_leaders(league_id: str, season: int = Query(...)):
         if not result:
             raise HTTPException(503, "Could not load league leaders")
         return {"league": league_id, "season": season, **result}
+
+    # API-Football — reliable structured fallback for non-Understat leagues
+    af_scorers = api_football.get_top_scorers(league_id, season, limit=20)
+    if af_scorers:
+        return {
+            "league": league_id,
+            "season": season,
+            "goals": [
+                {"player": s["player"], "team": s["team"], "value": s["goals"]}
+                for s in af_scorers if s.get("goals", 0) > 0
+            ],
+            "assists": sorted(
+                [{"player": s["player"], "team": s["team"], "value": s["assists"]}
+                 for s in af_scorers if s.get("assists", 0) > 0],
+                key=lambda x: x["value"], reverse=True,
+            ),
+            "xg": [], "key_passes": [], "shots": [],
+        }
 
     # FotMob — full stats pool available
     fm_league_id = fotmob.FOTMOB_LEAGUES.get(league_id)
@@ -232,6 +280,38 @@ def get_team_meta(league_id: str, team_name: str = Query(...), season: int = Que
         None,
     )
     if not match:
+        af_teams = api_football.get_teams(league_id, season)
+        match = next(
+            (t for t in af_teams if t["name"].lower() == name_lower
+             or t.get("short", "").lower() == name_lower
+             or name_lower in t["name"].lower()
+             or t["name"].lower() in name_lower),
+            None,
+        )
+        if match:
+            return {
+                "crest": match.get("crest"),
+                "venue": match.get("venue"),
+                "founded": match.get("founded"),
+                "address": match.get("address"),
+            }
+
+        fm_id = fotmob.FOTMOB_LEAGUES.get(league_id)
+        if fm_id:
+            fm_table = fotmob.get_league_table(fm_id, season)
+            match_row = next(
+                (r for r in fm_table if team_name.lower() in r.get("team", "").lower()
+                 or r.get("team", "").lower() in team_name.lower()),
+                None,
+            )
+            if match_row:
+                team_id = str(match_row.get("team_id") or "")
+                return {
+                    "crest": f"https://images.fotmob.com/image_resources/logo/teamlogo/{team_id}.png" if team_id else None,
+                    "venue": None,
+                    "founded": None,
+                    "address": None,
+                }
         return {"crest": None, "venue": None, "founded": None, "address": None}
     return {
         "crest":   match.get("crest"),
